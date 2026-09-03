@@ -1,4 +1,17 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#26594A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Series">
 <title>Series Behobia</title>
+</head>
+<body>
 <style>
 :root{
   --paper:#F2F4F1;
@@ -31,6 +44,7 @@
   --ember:#FF8452; --ember-text:#FFB08D; --ember-soft:#3A2418;
 }
 *{box-sizing:border-box;}
+[hidden]{display:none !important;}
 html,body{height:100%;}
 body{
   margin:0; background:var(--paper); color:var(--ink);
@@ -88,7 +102,7 @@ select,input[type=number]{
 
 .big-btn{
   width:100%;margin-top:1.25rem;padding:1rem;border:none;border-radius:12px;
-  background:var(--pine);color:#fff;font-family:var(--font-display);font-weight:700;
+  background:#26594A;color:#fff;font-family:var(--font-display);font-weight:700;
   font-size:1.15rem;cursor:pointer;
 }
 .big-btn:disabled{opacity:0.5;}
@@ -102,10 +116,12 @@ select,input[type=number]{
 .last-msg{font-size:0.85rem;color:var(--pine);margin-top:0.8rem;font-family:var(--font-mono);}
 
 /* ---------------- Run screen ---------------- */
-#run{position:fixed;inset:0;display:flex;flex-direction:column;color:#fff;background:var(--ink);}
+/* fixed colours on purpose: the run screen always uses white text, so it must not
+   follow the light/dark tokens or the text lands on its own colour */
+#run{position:fixed;top:0;left:0;width:100%;height:100vh;height:100dvh;display:flex;flex-direction:column;color:#fff;background:#232B28;}
 #run.phase-warmup,#run.phase-cooldown{background:#3B4A44;}
-#run.phase-work{background:var(--pine);}
-#run.phase-rest{background:var(--ember);}
+#run.phase-work{background:#1F5545;}
+#run.phase-rest{background:#A83E1A;}
 .run-top{display:flex;justify-content:space-between;align-items:center;padding:0.9rem 1.1rem 0.4rem;font-family:var(--font-mono);font-size:0.72rem;opacity:0.9;gap:0.5rem;}
 .run-top span{white-space:nowrap;}
 .run-center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:1rem;}
@@ -123,12 +139,12 @@ select,input[type=number]{
 @keyframes pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.05);}}
 .gps-wait{font-family:var(--font-mono);font-size:0.95rem;opacity:0.9;margin-top:0.8rem;}
 .next-up{margin-top:1.1rem;font-size:0.83rem;opacity:0.7;}
-.run-bottom{display:flex;gap:0.7rem;padding:1.1rem;padding-bottom:calc(1.1rem + env(safe-area-inset-bottom));}
+.run-bottom{display:flex;gap:0.7rem;padding:1.1rem;padding-bottom:calc(1.8rem + env(safe-area-inset-bottom));}
 .run-bottom button{
-  flex:1;padding:0.95rem;border-radius:12px;border:1px solid rgba(255,255,255,.4);
-  background:rgba(255,255,255,.12);color:#fff;font-family:var(--font-display);font-weight:700;font-size:1rem;
+  flex:1;padding:1rem 0.5rem;border-radius:12px;border:1.5px solid rgba(255,255,255,.65);
+  background:rgba(255,255,255,.2);color:#fff;font-family:var(--font-display);font-weight:700;font-size:1.05rem;
 }
-.run-bottom button.danger{background:rgba(0,0,0,.2);}
+.run-bottom button.danger{background:rgba(0,0,0,.28);}
 
 /* ---------------- Done / error screens ---------------- */
 #done,#gpsError{max-width:480px;margin:0 auto;padding:3rem 1.25rem;text-align:center;}
@@ -248,8 +264,8 @@ select,input[type=number]{
     <div id="distView" hidden>
       <div class="gps-wait" id="gpsWaitMsg" hidden>Buscando señal GPS…</div>
       <div id="distStats" hidden>
-        <div class="countdown tabular" id="metersLeft">400<span class="unit">m restantes</span></div>
-        <div class="progress-meta" id="metersCovered">0 / 400 m</div>
+        <div class="countdown tabular" id="metersLeft">400<span class="unit">m</span></div>
+        <div class="progress-meta" id="metersCovered">llevas 0 / 400 m</div>
         <div class="dist-track"><div class="dist-fill" id="distFill"></div></div>
         <div class="pace-row">
           <div class="pace-chip" id="paceChip">Objetivo 4:30 ±5s/km</div>
@@ -676,14 +692,15 @@ select,input[type=number]{
           const chip = document.getElementById('paceChip');
           if(p.pace!=null){ chip.hidden=false; chip.textContent = 'Objetivo ' + fmtPace(p.pace) + ' ±' + p.tol + 's/km'; }
           else chip.hidden = true;
+          document.getElementById('paceStatus').hidden = (p.pace==null);
           const goText = p.total>1 ? ('¡Vamos! ' + p.targetMeters + ' metros.') : ('¡Vamos! ' + fmtKm(p.targetMeters) + '.');
           beep(880,0.16); speak(goText);
         }
         return;
       }
       const remaining = Math.max(0, p.targetMeters - workDistanceAccum);
-      document.getElementById('metersLeft').innerHTML = Math.round(remaining) + '<span class="unit">m restantes</span>';
-      document.getElementById('metersCovered').textContent = Math.round(Math.min(workDistanceAccum,p.targetMeters)) + ' / ' + p.targetMeters + ' m';
+      document.getElementById('metersLeft').innerHTML = Math.round(remaining) + '<span class="unit">m</span>';
+      document.getElementById('metersCovered').textContent = 'llevas ' + Math.round(Math.min(workDistanceAccum,p.targetMeters)) + ' / ' + p.targetMeters + ' m';
       document.getElementById('distFill').style.width = Math.min(100, 100*workDistanceAccum/p.targetMeters).toFixed(1) + '%';
 
       const status = document.getElementById('paceStatus');
@@ -705,7 +722,7 @@ select,input[type=number]{
           }
         }
       } else {
-        status.textContent = '';
+        status.hidden = true;
       }
 
       if(workDistanceAccum >= p.targetMeters){ goToPhase(currentIdx+1); return; }
@@ -791,3 +808,5 @@ select,input[type=number]{
   });
 })();
 </script>
+</body>
+</html>
