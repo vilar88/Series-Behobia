@@ -1,17 +1,4 @@
-<!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#26594A">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Series">
 <title>Series Behobia</title>
-</head>
-<body>
 <style>
 :root{
   --paper:#F2F4F1;
@@ -158,9 +145,9 @@ select,input[type=number]{
 
 <!-- ============ SETUP ============ -->
 <div id="setup">
-  <div class="eyebrow">Entrenador de series · Behobia 2026</div>
+  <div class="eyebrow">Entrenador · Behobia 2026 · objetivo 1:43</div>
   <h1 class="title">Series Behobia</h1>
-  <p class="subtitle">Mide las series con tu GPS real y te avisa por voz si vas más lento o más rápido de lo previsto. Auriculares puestos, móvil en el bolsillo o brazalete con la pantalla encendida.</p>
+  <p class="subtitle">Todas las sesiones del plan, del 5 de septiembre al 8 de noviembre. Mide con tu GPS real y te avisa por voz si te sales del ritmo previsto — también si vas demasiado rápido en los días suaves.</p>
 
   <div class="gps-banner" id="gpsBanner"><span class="gps-dot"></span><span id="gpsBannerText">Comprobando disponibilidad de GPS…</span></div>
   <button class="mini-btn" id="gpsTestBtn">Probar GPS ahora</button>
@@ -212,7 +199,7 @@ select,input[type=number]{
         <label>Ritmo objetivo (min/km)</label>
         <div class="row2">
           <input type="number" id="cuPaceMin" value="4" min="2" max="9" placeholder="min">
-          <input type="number" id="cuPaceSec" value="30" min="0" max="59" placeholder="seg">
+          <input type="number" id="cuPaceSec" value="40" min="0" max="59" placeholder="seg">
         </div>
       </div>
       <div class="field">
@@ -242,7 +229,7 @@ select,input[type=number]{
     <button class="big-btn" id="startCustomBtn">Empezar</button>
   </div>
 
-  <p class="note">Necesita permiso de localización y GPS real activado en el móvil, con la pantalla encendida y esta pestaña en primer plano durante toda la sesión. El calentamiento le da tiempo a enganchar señal antes de la primera serie.</p>
+  <p class="note">Necesita permiso de localización y GPS real activado en el móvil, con la pantalla encendida y esta pestaña en primer plano durante toda la sesión. El calentamiento le da tiempo a enganchar señal antes de la primera serie. Para las tiradas largas de más de una hora, plantéate llevar batería externa.</p>
   <div class="last-msg" id="lastMsg"></div>
 </div>
 
@@ -268,7 +255,7 @@ select,input[type=number]{
         <div class="progress-meta" id="metersCovered">llevas 0 / 400 m</div>
         <div class="dist-track"><div class="dist-fill" id="distFill"></div></div>
         <div class="pace-row">
-          <div class="pace-chip" id="paceChip">Objetivo 4:30 ±5s/km</div>
+          <div class="pace-chip" id="paceChip">Objetivo 4:40 ±5s/km</div>
           <div class="pace-status" id="paceStatus">— /km</div>
         </div>
       </div>
@@ -303,18 +290,85 @@ select,input[type=number]{
 (function(){
   "use strict";
 
-  // ---------------- Presets (distance + target pace, derived from the 10-week plan) ----------------
-  // pace values in seconds per km. tol = allowed band (±) before a voice alert fires.
+  // ============================================================
+  //  PLAN BEHOBIA 2026 — 10 semanas, 31 ago a 8 nov
+  //  Objetivo 1:43:00 (5:09/km) · ambicioso 1:40:00 (5:00/km)
+  //
+  //  Dos formatos de sesión:
+  //   · count + work + rest  → series repetidas con recuperación
+  //   · segments[]           → tramos encadenados, cada uno con su ritmo
+  //  Ritmos en segundos por km. tol = margen (±) antes del aviso de voz.
+  // ============================================================
   const PRESETS = {
-    w1:  {name:'Semana 1 — Progresiones (2 sep)',     warmup:600, cooldown:300, count:5, work:{meters:100,  label:'Progresión',   pace:null, tol:null}, rest:{dur:90,  label:'Trote suave'}},
-    w2:  {name:'Semana 2 — Tempo (9 sep)',             warmup:600, cooldown:300, count:1, work:{meters:2900, label:'Tempo',        pace:315,  tol:5},    rest:null},
-    w3:  {name:'Semana 3 — Tempo (16 sep)',            warmup:600, cooldown:300, count:1, work:{meters:3900, label:'Tempo',        pace:310,  tol:5},    rest:null},
-    w4:  {name:'Semana 4 — 6×600 m (23 sep, viaje)',   warmup:600, cooldown:300, count:6, work:{meters:600,  label:'Serie',        pace:305,  tol:5},    rest:{dur:90,  label:'Trote suave'}},
-    w5:  {name:'Semana 5 — Tempo (30 sep)',            warmup:600, cooldown:300, count:1, work:{meters:4800, label:'Tempo',        pace:310,  tol:5},    rest:null},
-    w7:  {name:'Semana 7 — Tempo (14 oct)',            warmup:600, cooldown:300, count:1, work:{meters:3900, label:'Tempo',        pace:310,  tol:5},    rest:null},
-    w8:  {name:'Semana 8 — Tempo (21 oct, pico)',      warmup:600, cooldown:300, count:1, work:{meters:5900, label:'Tempo',        pace:305,  tol:5},    rest:null},
-    w9:  {name:'Semana 9 — 6×400 m (28 oct)',          warmup:600, cooldown:300, count:6, work:{meters:400,  label:'Serie 400 m',  pace:270,  tol:5},    rest:{dur:90,  label:'Trote suave'}},
-    w10: {name:'Semana 10 — Progresiones (4 nov)',     warmup:300, cooldown:300, count:4, work:{meters:100,  label:'Progresión',   pace:null, tol:null}, rest:{dur:100, label:'Trote suave'}},
+    sab05sep: {name:'Sáb 5 sep · Tirada larga 8 km',
+      segments:[{meters:8000, label:'Tirada larga', pace:357, tol:8}]},
+
+    mie09sep: {name:'Mié 9 sep · Tempo 20′', warmup:600, cooldown:300, count:1,
+      work:{meters:3800, label:'Tempo', pace:315, tol:5}, rest:null},
+
+    sab12sep: {name:'Sáb 12 sep · Tirada larga 10 km',
+      segments:[{meters:10000, label:'Tirada larga', pace:352, tol:8}]},
+
+    mie16sep: {name:'Mié 16 sep · 5×1.000 m', warmup:600, cooldown:300, count:5,
+      work:{meters:1000, label:'Serie 1.000 m', pace:300, tol:5}, rest:{dur:120, label:'Trote suave'}},
+
+    sab19sep: {name:'Sáb 19 sep · Tirada larga 11 km',
+      segments:[{meters:11000, label:'Tirada larga', pace:352, tol:8}]},
+
+    lun21sep: {name:'Lun 21 sep · Rodaje suave 6 km (viaje)',
+      segments:[{meters:6000, label:'Rodaje suave', pace:370, tol:10}]},
+
+    mie23sep: {name:'Mié 23 sep · 3 km a ritmo (viaje)', warmup:720, cooldown:720, count:1,
+      work:{meters:3000, label:'Ritmo objetivo', pace:310, tol:5}, rest:null},
+
+    vie25sep: {name:'Vie 25 sep · Rodaje suave 6 km (opcional)',
+      segments:[{meters:6000, label:'Rodaje suave', pace:370, tol:10}]},
+
+    sab26sep: {name:'Sáb 26 sep · Tirada larga 13 km',
+      segments:[{meters:13000, label:'Tirada larga', pace:347, tol:8}]},
+
+    mie30sep: {name:'Mié 30 sep · 6×1.000 m', warmup:600, cooldown:300, count:6,
+      work:{meters:1000, label:'Serie 1.000 m', pace:298, tol:5}, rest:{dur:90, label:'Trote suave'}},
+
+    sab03oct: {name:'Sáb 3 oct · Tirada larga 14 km',
+      segments:[{meters:14000, label:'Tirada larga', pace:347, tol:8}]},
+
+    mie07oct: {name:'Mié 7 oct · 4 km a ritmo', warmup:720, cooldown:720, count:1,
+      work:{meters:4000, label:'Ritmo objetivo', pace:310, tol:5}, rest:null},
+
+    mie14oct: {name:'Mié 14 oct · 3×2.000 m', warmup:600, cooldown:300, count:3,
+      work:{meters:2000, label:'Serie 2.000 m', pace:308, tol:5}, rest:{dur:180, label:'Trote suave'}},
+
+    sab17oct: {name:'Sáb 17 oct · Larga 16 km + 2 a ritmo',
+      segments:[
+        {meters:14000, label:'Tirada larga', pace:347, tol:8},
+        {meters:2000,  label:'Últimos 2 km a ritmo', pace:310, tol:5}
+      ]},
+
+    mie21oct: {name:'Mié 21 oct · 6 km a ritmo (pico)', warmup:720, cooldown:720, count:1,
+      work:{meters:6000, label:'Ritmo objetivo', pace:310, tol:5}, rest:null},
+
+    sab24oct: {name:'Sáb 24 oct · Larga 18 km progresivos ⭐',
+      segments:[
+        {meters:8000, label:'Bloque suave',  pace:357, tol:10},
+        {meters:6000, label:'Bloque medio',  pace:345, tol:8},
+        {meters:4000, label:'Bloque fuerte', pace:310, tol:8}
+      ]},
+
+    mie28oct: {name:'Mié 28 oct · 6×400 m', warmup:600, cooldown:300, count:6,
+      work:{meters:400, label:'Serie 400 m', pace:280, tol:5}, rest:{dur:90, label:'Trote suave'}},
+
+    sab31oct: {name:'Sáb 31 oct · 12 km + 2 a ritmo',
+      segments:[
+        {meters:10000, label:'Rodaje', pace:352, tol:8},
+        {meters:2000,  label:'Últimos 2 km a ritmo', pace:310, tol:5}
+      ]},
+
+    mie04nov: {name:'Mié 4 nov · 3×300 m progresivos', warmup:900, cooldown:900, count:3,
+      work:{meters:300, label:'Progresión', pace:null, tol:null}, rest:{dur:120, label:'Trote suave'}},
+
+    vie06nov: {name:'Vie 6 nov · Activación + 4 progresiones', warmup:900, cooldown:300, count:4,
+      work:{meters:100, label:'Progresión', pace:null, tol:null}, rest:{dur:90, label:'Trote suave'}},
   };
 
   function fmtMMSS(totalSec){
@@ -325,41 +379,101 @@ select,input[type=number]{
   function fmtPace(secPerKm){ return fmtMMSS(secPerKm); }
   function fmtHuman(totalSec){ return Math.round(totalSec/60) + ' min'; }
   function fmtKm(meters){ return meters>=1000 ? (meters/1000).toFixed(meters%1000===0?0:1)+' km' : meters+' m'; }
+  function fmtNum(n){ return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
 
   function buildPhases(s){
     const phases=[];
     if(s.warmup>0) phases.push({kind:'warmup', dur:s.warmup, label:'Calentamiento'});
-    for(let i=0;i<s.count;i++){
-      phases.push({kind:'work', targetMeters:s.work.meters, label:s.work.label, pace:s.work.pace, tol:s.work.tol, rep:i+1, total:s.count});
-      if(s.rest && s.rest.dur>0 && i<s.count-1){
-        phases.push({kind:'rest', dur:s.rest.dur, label:s.rest.label, rep:i+1, total:s.count});
+
+    if(s.segments && s.segments.length){
+      // tramos encadenados: cada uno con su propio ritmo, sin contador de series
+      s.segments.forEach(function(seg){
+        if(seg.dur){
+          phases.push({kind:'rest', dur:seg.dur, label:seg.label||'Trote suave'});
+        } else {
+          phases.push({kind:'work', targetMeters:seg.meters, label:seg.label||'Tramo',
+                       pace:(seg.pace!=null?seg.pace:null), tol:(seg.tol!=null?seg.tol:8)});
+        }
+      });
+    } else {
+      for(let i=0;i<s.count;i++){
+        phases.push({kind:'work', targetMeters:s.work.meters, label:s.work.label, pace:s.work.pace, tol:s.work.tol, rep:i+1, total:s.count});
+        if(s.rest && s.rest.dur>0 && i<s.count-1){
+          phases.push({kind:'rest', dur:s.rest.dur, label:s.rest.label, rep:i+1, total:s.count});
+        }
       }
     }
+
     if(s.cooldown>0) phases.push({kind:'cooldown', dur:s.cooldown, label:'Enfriamiento'});
     return phases;
   }
 
   function describeFlow(s){
-    const parts=[];
-    if(s.warmup>0) parts.push('Calentamiento <b>'+fmtHuman(s.warmup)+'</b>');
-    const paceTxt = s.work.pace!=null ? (' @ '+fmtPace(s.work.pace)+'/km ±'+s.work.tol+'s') : '';
-    if(s.count===1){
-      parts.push(s.work.label+' <b>'+fmtKm(s.work.meters)+'</b>'+paceTxt);
+    const sentences = [];
+    if(s.warmup>0) sentences.push('Empiezas con un <b>calentamiento de '+fmtHuman(s.warmup)+'</b> a ritmo suave, para entrar en calor y dar tiempo al GPS a coger buena señal.');
+
+    if(s.segments && s.segments.length){
+      const parts = s.segments.map(function(seg){
+        if(seg.dur) return '<b>'+fmtMMSS(seg.dur)+'</b> de trote suave';
+        return '<b>'+fmtKm(seg.meters)+'</b>'+(seg.pace!=null ? ' a <b>'+fmtPace(seg.pace)+' min/km</b>' : '');
+      });
+      if(parts.length===1){
+        const seg = s.segments[0];
+        sentences.push('Es un tramo único de '+parts[0]+'. Te avisará por voz si te desvías más de <b>'+(seg.tol||8)+' segundos por km</b> de ese ritmo.');
+        if(seg.pace!=null && seg.pace>=340){
+          sentences.push('Aquí el error habitual es ir demasiado rápido: si te dice que aflojes, aflojas. Correr lento estos días es lo que te permite correr fuerte los miércoles.');
+        }
+      } else {
+        sentences.push('El entreno va por tramos encadenados: '+parts.join(', después ')+'.');
+        sentences.push('Cada tramo tiene su propio ritmo objetivo y te avisará por voz en cuanto te salgas de él.');
+      }
     } else {
-      let mid = s.count+'× ('+s.work.meters+' m'+paceTxt+(s.rest&&s.rest.dur>0? ' + '+fmtMMSS(s.rest.dur)+' trote':'')+')';
-      parts.push('<b>'+mid+'</b>');
+      const hasPace = s.work.pace!=null;
+      const distTxt = fmtNum(s.work.meters)+' m';
+      const paceExplain = hasPace
+        ? ' al ritmo objetivo de <b>'+fmtPace(s.work.pace)+' min/km</b>. Te avisaremos por voz si te desvías más de <b>'+s.work.tol+' segundos por km</b> de ese ritmo, tanto si vas más lento como si vas más rápido.'
+        : ', sin ritmo objetivo fijo: la idea es ir progresando el ritmo libremente, cada repetición un poco más rápida que la anterior.';
+
+      if(s.count===1){
+        sentences.push('El cuerpo del entreno es un <b>tramo continuo de '+fmtKm(s.work.meters)+'</b>'+paceExplain);
+      } else {
+        const kind = hasPace ? 'series' : 'progresiones';
+        sentences.push('El cuerpo del entreno son <b>'+s.count+' '+kind+' de '+distTxt+'</b> cada una'+paceExplain);
+        if(s.rest && s.rest.dur>0){
+          sentences.push('Entre cada '+(hasPace?'serie':'progresión')+' hay <b>'+fmtMMSS(s.rest.dur)+'</b> de trote suave de recuperación antes de la siguiente.');
+        } else {
+          sentences.push('Las '+kind+' van seguidas, sin recuperación entre ellas.');
+        }
+      }
     }
-    if(s.cooldown>0) parts.push('Enfriamiento <b>'+fmtHuman(s.cooldown)+'</b>');
-    return parts.join(' &rarr; ');
+
+    if(s.cooldown>0) sentences.push('Terminas con un <b>enfriamiento de '+fmtHuman(s.cooldown)+'</b> a ritmo suave.');
+
+    return sentences.join('<br><br>');
   }
 
   function estTotalDuration(s){
+    let t = (s.warmup||0) + (s.cooldown||0);
+    if(s.segments && s.segments.length){
+      s.segments.forEach(function(seg){
+        if(seg.dur) t += seg.dur;
+        else t += (seg.meters/1000) * (seg.pace!=null ? seg.pace : 360);
+      });
+      return t;
+    }
     let workSec;
     if(s.work.pace!=null) workSec = (s.work.meters/1000)*s.work.pace;
-    else workSec = s.work.meters/100*30; // rough estimate for free progressions
-    let t = s.warmup + s.cooldown + s.count*workSec;
+    else workSec = s.work.meters/100*30; // estimación para progresiones libres
+    t += s.count*workSec;
     if(s.rest && s.rest.dur>0) t += (s.count-1)*s.rest.dur;
     return t;
+  }
+
+  function totalDistance(s){
+    if(s.segments && s.segments.length){
+      return s.segments.reduce(function(a,seg){ return a + (seg.meters||0); }, 0);
+    }
+    return s.count * s.work.meters;
   }
 
   // ---------------- Setup: preset panel ----------------
@@ -372,7 +486,8 @@ select,input[type=number]{
   function renderPresetSummary(){
     const s = PRESETS[presetSelect.value];
     document.getElementById('presetFlow').innerHTML = describeFlow(s);
-    document.getElementById('presetTotal').textContent = 'Total estimado ≈ ' + fmtHuman(estTotalDuration(s)) + ' (depende de tu ritmo real)';
+    document.getElementById('presetTotal').textContent =
+      fmtKm(totalDistance(s)) + ' medidos por GPS · total estimado ≈ ' + fmtHuman(estTotalDuration(s));
   }
   presetSelect.addEventListener('change', renderPresetSummary);
   renderPresetSummary();
@@ -425,7 +540,8 @@ select,input[type=number]{
   function renderCustomSummary(){
     const s = readCustomSession();
     document.getElementById('customFlow').innerHTML = describeFlow(s);
-    document.getElementById('customTotal').textContent = 'Total estimado ≈ ' + fmtHuman(estTotalDuration(s)) + ' (depende de tu ritmo real)';
+    document.getElementById('customTotal').textContent =
+      fmtKm(totalDistance(s)) + ' medidos por GPS · total estimado ≈ ' + fmtHuman(estTotalDuration(s));
   }
   renderCustomSummary();
 
@@ -478,7 +594,7 @@ select,input[type=number]{
   let gpsWatchId = null, lastFix = null, gpsAccuracy = null, gpsOk = false, lastFixTs = 0;
   let totalDistanceAll = 0;
   let workDistanceAccum = 0;
-  let paceBuffer = []; // {t, d} over last ~20s, d = cumulative distance in current work phase
+  let paceBuffer = []; // {t, d} de los últimos ~18 s, d = distancia acumulada del tramo
 
   function haversine(lat1,lon1,lat2,lon2){
     const R=6371000, toRad=Math.PI/180;
@@ -500,7 +616,7 @@ select,input[type=number]{
 
     if(accuracy > 30){
       setGpsBanner(false, 'Señal débil (±' + Math.round(accuracy) + ' m) — sal a cielo abierto si puedes.');
-      lastFixTs = t; // still counts as "recent" so we don't say GPS is dead, just weak
+      lastFixTs = t;
       return;
     }
     gpsOk = true; lastFixTs = t;
@@ -513,7 +629,7 @@ select,input[type=number]{
       const dt = (t - lastFix.t)/1000;
       if(dt>0.2){
         const speed = d/dt; // m/s
-        if(d<2 || speed<=7){ // reject implausible jumps (>7 m/s ~ 2:23/km)
+        if(d<2 || speed<=7){ // descarta saltos imposibles (>7 m/s ≈ 2:23/km)
           totalDistanceAll += d;
           if(currentIdx>=0 && phases[currentIdx] && phases[currentIdx].kind==='work' && workPhaseActive){
             workDistanceAccum += d;
@@ -524,9 +640,6 @@ select,input[type=number]{
       }
     }
     lastFix = {lat,lon,t};
-  }
-  function onGpsErrorInit(err){
-    showGpsError(err);
   }
   function startGpsWatch(){
     if(!('geolocation' in navigator)){
@@ -551,7 +664,6 @@ select,input[type=number]{
     return (dt/dd)*1000;
   }
 
-  // warm up GPS availability check on load (does not start tracking yet)
   const inFrame = (function(){ try{ return window.self !== window.top; }catch(e){ return true; } })();
   if('geolocation' in navigator){
     setGpsBanner(false, 'El GPS se activa al pulsar Empezar.');
@@ -561,7 +673,7 @@ select,input[type=number]{
   if(inFrame){
     const hint = document.getElementById('iframeHint');
     hint.hidden = false;
-    hint.textContent = 'Estás abriendo esto dentro de otra app (la de Claude). Ese contenedor puede bloquear el GPS: pulsa "Probar GPS ahora" para comprobarlo. Si falla, abre este mismo enlace en Chrome o Safari del móvil y añádelo a la pantalla de inicio.';
+    hint.textContent = 'Estás abriendo esto dentro de otra app. Ese contenedor puede bloquear el GPS: pulsa "Probar GPS ahora" para comprobarlo. Si falla, abre este mismo enlace en Chrome o Safari del móvil y añádelo a la pantalla de inicio.';
   }
 
   document.getElementById('gpsTestBtn').addEventListener('click', function(){
@@ -597,7 +709,7 @@ select,input[type=number]{
   let running = false, currentIdx = -1;
   let sessionStartTs = 0, pausedAccumTotal = 0, pauseStartTs = null;
   let phaseStartTs = 0, phasePausedAccum = 0;
-  let workPhaseActive = false; // true once GPS lock acquired and rep truly started
+  let workPhaseActive = false;
   let tickHandle = null;
   let alertStreak = 0, alertDir = null, lastAlertTime = 0, alertedDir = null;
 
@@ -625,7 +737,7 @@ select,input[type=number]{
     running = true;
     requestWakeLock();
     beep(660,0.12);
-    speak('Empezamos. ' + name.replace(/\s—.*/, '') + '.');
+    speak('Empezamos. ' + name.replace(/^[^·]*·\s*/, '').replace(/\s*⭐/, '') + '.');
     goToPhase(0);
     tickHandle = setInterval(tick, 400);
   }
@@ -644,7 +756,7 @@ select,input[type=number]{
     if(p.kind==='work'){
       document.getElementById('gpsWaitMsg').hidden = false;
       document.getElementById('distStats').hidden = true;
-      workPhaseActive = false; // wait for good GPS fix before starting to count
+      workPhaseActive = false;
       const introText = p.total>1 ? ('Serie ' + p.rep + ' de ' + p.total + '. Buscando GPS.') : (p.label + '. Buscando GPS.');
       beep(660,0.14); speak(introText);
     } else {
@@ -699,8 +811,8 @@ select,input[type=number]{
         return;
       }
       const remaining = Math.max(0, p.targetMeters - workDistanceAccum);
-      document.getElementById('metersLeft').innerHTML = Math.round(remaining) + '<span class="unit">m</span>';
-      document.getElementById('metersCovered').textContent = 'llevas ' + Math.round(Math.min(workDistanceAccum,p.targetMeters)) + ' / ' + p.targetMeters + ' m';
+      document.getElementById('metersLeft').innerHTML = fmtNum(remaining) + '<span class="unit">m</span>';
+      document.getElementById('metersCovered').textContent = 'llevas ' + fmtNum(Math.min(workDistanceAccum,p.targetMeters)) + ' / ' + fmtNum(p.targetMeters) + ' m';
       document.getElementById('distFill').style.width = Math.min(100, 100*workDistanceAccum/p.targetMeters).toFixed(1) + '%';
 
       const status = document.getElementById('paceStatus');
@@ -712,13 +824,13 @@ select,input[type=number]{
           status.classList.remove('alert');
           if(pace > p.pace + p.tol){
             status.textContent = fmtPace(pace)+'/km · LENTO';
-            evalAlert('slow', p.pace);
+            evalAlert('slow');
           } else if(pace < p.pace - p.tol){
             status.textContent = fmtPace(pace)+'/km · RÁPIDO';
-            evalAlert('fast', p.pace);
+            evalAlert('fast');
           } else {
             status.textContent = fmtPace(pace)+'/km · bien';
-            evalAlert(null, p.pace);
+            evalAlert(null);
           }
         }
       } else {
@@ -733,17 +845,17 @@ select,input[type=number]{
     }
   }
 
-  function evalAlert(dir, targetPace){
-    // tick runs every 400ms; require sustained deviation before speaking, to ride out GPS jitter
+  function evalAlert(dir){
+    // tick cada 400 ms; exige desviación sostenida antes de hablar, para aguantar el ruido del GPS
     if(dir===alertDir){ alertStreak++; } else { alertDir=dir; alertStreak=1; }
     const now = Date.now();
-    if(dir && alertStreak>=15 && (now-lastAlertTime)>16000){ // ~6s sustained, then 16s cooldown
+    if(dir && alertStreak>=15 && (now-lastAlertTime)>16000){ // ~6 s sostenidos, luego 16 s de silencio
       lastAlertTime = now; alertedDir = dir;
       document.getElementById('paceStatus').classList.add('alert');
       beep(dir==='slow'?520:1050, 0.15);
-      speak(dir==='slow' ? 'Vas lento, acelera un poco.' : 'Vas rápido, controla el ritmo.');
+      speak(dir==='slow' ? 'Vas lento, acelera un poco.' : 'Vas rápido, afloja el ritmo.');
     }
-    if(!dir && alertedDir && alertStreak>=8){ // ~3s back in band
+    if(!dir && alertedDir && alertStreak>=8){ // ~3 s de vuelta en rango
       alertedDir=null;
       speak('Ritmo bien.');
     }
@@ -808,5 +920,3 @@ select,input[type=number]{
   });
 })();
 </script>
-</body>
-</html>
