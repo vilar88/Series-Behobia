@@ -209,7 +209,7 @@ select,input[type=number]{
       </div>
       <div class="field">
         <label for="cuTol">Tolerancia antes de avisar (segundos/km)</label>
-        <input type="number" id="cuTol" value="5" min="1" max="30">
+        <input type="number" id="cuTol" value="15" min="1" max="30">
       </div>
     </div>
 
@@ -306,67 +306,67 @@ select,input[type=number]{
   // ============================================================
   const PRESETS = {
     sab05sep: {name:'Sáb 5 sep · Tirada larga 8 km',
-      segments:[{meters:8000, label:'Tirada larga', pace:357, tol:8}]},
+      segments:[{meters:8000, label:'Tirada larga', pace:357, tol:15}]},
 
     mie09sep: {name:'Mié 9 sep · Tempo 20′', warmup:600, cooldown:300, count:1,
-      work:{meters:3800, label:'Tempo', pace:315, tol:5}, rest:null},
+      work:{meters:3800, label:'Tempo', pace:315, tol:10}, rest:null},
 
     sab12sep: {name:'Sáb 12 sep · Tirada larga 10 km',
-      segments:[{meters:10000, label:'Tirada larga', pace:352, tol:8}]},
+      segments:[{meters:10000, label:'Tirada larga', pace:352, tol:15}]},
 
     mie16sep: {name:'Mié 16 sep · 5×1.000 m', warmup:600, cooldown:300, count:5,
-      work:{meters:1000, label:'Serie 1.000 m', pace:300, tol:5}, rest:{dur:120, label:'Trote suave'}},
+      work:{meters:1000, label:'Serie 1.000 m', pace:300, tol:10}, rest:{dur:120, label:'Trote suave'}},
 
     sab19sep: {name:'Sáb 19 sep · Tirada larga 11 km',
-      segments:[{meters:11000, label:'Tirada larga', pace:352, tol:8}]},
+      segments:[{meters:11000, label:'Tirada larga', pace:352, tol:15}]},
 
     lun21sep: {name:'Lun 21 sep · Rodaje suave 6 km (viaje)',
-      segments:[{meters:6000, label:'Rodaje suave', pace:370, tol:10}]},
+      segments:[{meters:6000, label:'Rodaje suave', pace:370, tol:15}]},
 
     mie23sep: {name:'Mié 23 sep · 3 km a ritmo (viaje)', warmup:720, cooldown:720, count:1,
-      work:{meters:3000, label:'Ritmo objetivo', pace:310, tol:5}, rest:null},
+      work:{meters:3000, label:'Ritmo objetivo', pace:310, tol:10}, rest:null},
 
     vie25sep: {name:'Vie 25 sep · Rodaje suave 6 km (opcional)',
-      segments:[{meters:6000, label:'Rodaje suave', pace:370, tol:10}]},
+      segments:[{meters:6000, label:'Rodaje suave', pace:370, tol:15}]},
 
     sab26sep: {name:'Sáb 26 sep · Tirada larga 13 km',
-      segments:[{meters:13000, label:'Tirada larga', pace:347, tol:8}]},
+      segments:[{meters:13000, label:'Tirada larga', pace:347, tol:15}]},
 
     mie30sep: {name:'Mié 30 sep · 6×1.000 m', warmup:600, cooldown:300, count:6,
-      work:{meters:1000, label:'Serie 1.000 m', pace:298, tol:5}, rest:{dur:90, label:'Trote suave'}},
+      work:{meters:1000, label:'Serie 1.000 m', pace:298, tol:10}, rest:{dur:90, label:'Trote suave'}},
 
     sab03oct: {name:'Sáb 3 oct · Tirada larga 14 km',
-      segments:[{meters:14000, label:'Tirada larga', pace:347, tol:8}]},
+      segments:[{meters:14000, label:'Tirada larga', pace:347, tol:15}]},
 
     mie07oct: {name:'Mié 7 oct · 4 km a ritmo', warmup:720, cooldown:720, count:1,
-      work:{meters:4000, label:'Ritmo objetivo', pace:310, tol:5}, rest:null},
+      work:{meters:4000, label:'Ritmo objetivo', pace:310, tol:10}, rest:null},
 
     mie14oct: {name:'Mié 14 oct · 3×2.000 m', warmup:600, cooldown:300, count:3,
-      work:{meters:2000, label:'Serie 2.000 m', pace:308, tol:5}, rest:{dur:180, label:'Trote suave'}},
+      work:{meters:2000, label:'Serie 2.000 m', pace:308, tol:10}, rest:{dur:180, label:'Trote suave'}},
 
     sab17oct: {name:'Sáb 17 oct · Larga 16 km + 2 a ritmo',
       segments:[
-        {meters:14000, label:'Tirada larga', pace:347, tol:8},
-        {meters:2000,  label:'Últimos 2 km a ritmo', pace:310, tol:5}
+        {meters:14000, label:'Tirada larga', pace:347, tol:15},
+        {meters:2000,  label:'Últimos 2 km a ritmo', pace:310, tol:10}
       ]},
 
     mie21oct: {name:'Mié 21 oct · 6 km a ritmo (pico)', warmup:720, cooldown:720, count:1,
-      work:{meters:6000, label:'Ritmo objetivo', pace:310, tol:5}, rest:null},
+      work:{meters:6000, label:'Ritmo objetivo', pace:310, tol:10}, rest:null},
 
     sab24oct: {name:'Sáb 24 oct · Larga 18 km progresivos ⭐',
       segments:[
-        {meters:8000, label:'Bloque suave',  pace:357, tol:10},
-        {meters:6000, label:'Bloque medio',  pace:345, tol:8},
-        {meters:4000, label:'Bloque fuerte', pace:310, tol:8}
+        {meters:8000, label:'Bloque suave',  pace:357, tol:15},
+        {meters:6000, label:'Bloque medio',  pace:345, tol:15},
+        {meters:4000, label:'Bloque fuerte', pace:310, tol:10}
       ]},
 
     mie28oct: {name:'Mié 28 oct · 6×400 m', warmup:600, cooldown:300, count:6,
-      work:{meters:400, label:'Serie 400 m', pace:280, tol:5}, rest:{dur:90, label:'Trote suave'}},
+      work:{meters:400, label:'Serie 400 m', pace:280, tol:10}, rest:{dur:90, label:'Trote suave'}},
 
     sab31oct: {name:'Sáb 31 oct · 12 km + 2 a ritmo',
       segments:[
-        {meters:10000, label:'Rodaje', pace:352, tol:8},
-        {meters:2000,  label:'Últimos 2 km a ritmo', pace:310, tol:5}
+        {meters:10000, label:'Rodaje', pace:352, tol:15},
+        {meters:2000,  label:'Últimos 2 km a ritmo', pace:310, tol:10}
       ]},
 
     mie04nov: {name:'Mié 4 nov · 3×300 m progresivos', warmup:900, cooldown:900, count:3,
@@ -397,7 +397,7 @@ select,input[type=number]{
           phases.push({kind:'rest', dur:seg.dur, label:seg.label||'Trote suave'});
         } else {
           phases.push({kind:'work', targetMeters:seg.meters, label:seg.label||'Tramo',
-                       pace:(seg.pace!=null?seg.pace:null), tol:(seg.tol!=null?seg.tol:8)});
+                       pace:(seg.pace!=null?seg.pace:null), tol:(seg.tol!=null?seg.tol:15)});
         }
       });
     } else {
@@ -858,11 +858,11 @@ select,input[type=number]{
       lastAlertTime = now; alertedDir = dir;
       document.getElementById('paceStatus').classList.add('alert');
       beep(dir==='slow'?520:1050, 0.15);
-      speak(dir==='slow' ? 'Vas lento, acelera un poco.' : 'Vas rápido, afloja el ritmo.');
+      speak(dir==='slow' ? 'Vas lento.' : 'Vas rápido.');
     }
     if(!dir && alertedDir && alertStreak>=8){ // ~3 s de vuelta en rango
       alertedDir=null;
-      speak('Ritmo bien.');
+      beep(880,0.08); setTimeout(function(){ beep(1100,0.12); }, 100);
     }
   }
 
