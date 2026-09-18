@@ -305,74 +305,67 @@ select,input[type=number]{
   //  Ritmos en segundos por km. tol = margen (±) antes del aviso de voz.
   // ============================================================
   const PRESETS = {
-    sab05sep: {name:'Sáb 5 sep · Tirada larga 8 km',
-      segments:[{meters:8000, label:'Tirada larga', pace:357, tol:15}]},
+    // ── DOM 20 SEP ──
+    dom20sep: {name:'Dom 20 sep · Tirada larga 11 km',
+      segments:[{meters:11000, label:'Tirada larga', pace:347, tol:15}]},
 
-    mie09sep: {name:'Mié 9 sep · Tempo 20′', warmup:600, cooldown:300, count:1,
-      work:{meters:3800, label:'Tempo', pace:315, tol:10}, rest:null},
+    // ── SEMANA VIAJE 22-28 SEP — MINI-CAMP (3 días, ≤40 min) ──
+    lun22sep: {name:'Lun 22 sep · 5×1.000 m rápidas (viaje)', warmup:300, cooldown:300, count:5,
+      work:{meters:1000, label:'Serie 1.000 m', pace:285, tol:10}, rest:{dur:90, label:'Trote suave'}},
 
-    sab12sep: {name:'Sáb 12 sep · Tirada larga 10 km',
-      segments:[{meters:10000, label:'Tirada larga', pace:352, tol:15}]},
+    mie24sep: {name:'Mié 24 sep · Tempo 5 km (viaje)', warmup:300, cooldown:300,
+      segments:[{meters:5000, label:'Tempo', pace:295, tol:10}]},
 
-    mie16sep: {name:'Mié 16 sep · 5×1.000 m', warmup:600, cooldown:300, count:5,
-      work:{meters:1000, label:'Serie 1.000 m', pace:300, tol:10}, rest:{dur:120, label:'Trote suave'}},
+    sab27sep: {name:'Sáb 27 sep · 6 km a ritmo (viaje)', warmup:300, cooldown:300,
+      segments:[{meters:6000, label:'Ritmo objetivo', pace:300, tol:10}]},
 
-    sab19sep: {name:'Sáb 19 sep · Tirada larga 11 km',
-      segments:[{meters:11000, label:'Tirada larga', pace:352, tol:15}]},
+    // ── SEMANA 29 SEP – 5 OCT (Pirineos el finde) ──
+    mie01oct: {name:'Mié 1 oct · 5×1.000 m', warmup:600, cooldown:300, count:5,
+      work:{meters:1000, label:'Serie 1.000 m', pace:285, tol:10}, rest:{dur:120, label:'Trote suave'}},
 
-    lun21sep: {name:'Lun 21 sep · Rodaje suave 6 km (viaje)',
-      segments:[{meters:6000, label:'Rodaje suave', pace:370, tol:15}]},
+    // ── SEMANA 6-12 OCT ──
+    mie08oct: {name:'Mié 8 oct · 5 km a ritmo', warmup:720, cooldown:720, count:1,
+      work:{meters:5000, label:'Ritmo objetivo', pace:300, tol:10}, rest:null},
 
-    mie23sep: {name:'Mié 23 sep · 3 km a ritmo (viaje)', warmup:720, cooldown:720, count:1,
-      work:{meters:3000, label:'Ritmo objetivo', pace:310, tol:10}, rest:null},
+    sab11oct: {name:'Sáb 11 oct · Tirada larga 15 km',
+      segments:[{meters:15000, label:'Tirada larga', pace:337, tol:15}]},
 
-    vie25sep: {name:'Vie 25 sep · Rodaje suave 6 km (opcional)',
-      segments:[{meters:6000, label:'Rodaje suave', pace:370, tol:15}]},
+    // ── SEMANA 13-19 OCT ──
+    mie15oct: {name:'Mié 15 oct · 3×2.000 m', warmup:600, cooldown:300, count:3,
+      work:{meters:2000, label:'Serie 2.000 m', pace:290, tol:10}, rest:{dur:180, label:'Trote suave'}},
 
-    sab26sep: {name:'Sáb 26 sep · Tirada larga 13 km',
-      segments:[{meters:13000, label:'Tirada larga', pace:347, tol:15}]},
-
-    mie30sep: {name:'Mié 30 sep · 6×1.000 m', warmup:600, cooldown:300, count:6,
-      work:{meters:1000, label:'Serie 1.000 m', pace:298, tol:10}, rest:{dur:90, label:'Trote suave'}},
-
-    sab03oct: {name:'Sáb 3 oct · Tirada larga 14 km',
-      segments:[{meters:14000, label:'Tirada larga', pace:347, tol:15}]},
-
-    mie07oct: {name:'Mié 7 oct · 4 km a ritmo', warmup:720, cooldown:720, count:1,
-      work:{meters:4000, label:'Ritmo objetivo', pace:310, tol:10}, rest:null},
-
-    mie14oct: {name:'Mié 14 oct · 3×2.000 m', warmup:600, cooldown:300, count:3,
-      work:{meters:2000, label:'Serie 2.000 m', pace:308, tol:10}, rest:{dur:180, label:'Trote suave'}},
-
-    sab17oct: {name:'Sáb 17 oct · Larga 16 km + 2 a ritmo',
+    sab18oct: {name:'Sáb 18 oct · Larga 17 km + 2 a ritmo',
       segments:[
-        {meters:14000, label:'Tirada larga', pace:347, tol:15},
-        {meters:2000,  label:'Últimos 2 km a ritmo', pace:310, tol:10}
+        {meters:15000, label:'Tirada larga', pace:337, tol:15},
+        {meters:2000,  label:'Últimos 2 km a ritmo', pace:300, tol:10}
       ]},
 
-    mie21oct: {name:'Mié 21 oct · 6 km a ritmo (pico)', warmup:720, cooldown:720, count:1,
-      work:{meters:6000, label:'Ritmo objetivo', pace:310, tol:10}, rest:null},
+    // ── SEMANA 20-26 OCT — PICO ──
+    mie22oct: {name:'Mié 22 oct · 6 km a ritmo (pico)', warmup:720, cooldown:720, count:1,
+      work:{meters:6000, label:'Ritmo objetivo', pace:300, tol:10}, rest:null},
 
-    sab24oct: {name:'Sáb 24 oct · Larga 18 km progresivos ⭐',
+    sab25oct: {name:'Sáb 25 oct · Larga 18 km progresivos ⭐',
       segments:[
-        {meters:8000, label:'Bloque suave',  pace:357, tol:15},
-        {meters:6000, label:'Bloque medio',  pace:345, tol:15},
-        {meters:4000, label:'Bloque fuerte', pace:310, tol:10}
+        {meters:8000, label:'Bloque suave',  pace:347, tol:15},
+        {meters:6000, label:'Bloque medio',  pace:330, tol:15},
+        {meters:4000, label:'Bloque fuerte', pace:300, tol:10}
       ]},
 
-    mie28oct: {name:'Mié 28 oct · 6×400 m', warmup:600, cooldown:300, count:6,
-      work:{meters:400, label:'Serie 400 m', pace:280, tol:10}, rest:{dur:90, label:'Trote suave'}},
+    // ── SEMANA 27 OCT – 2 NOV — TAPER ──
+    mie29oct: {name:'Mié 29 oct · 6×400 m', warmup:600, cooldown:300, count:6,
+      work:{meters:400, label:'Serie 400 m', pace:265, tol:10}, rest:{dur:90, label:'Trote suave'}},
 
-    sab31oct: {name:'Sáb 31 oct · 12 km + 2 a ritmo',
+    sab01nov: {name:'Sáb 1 nov · 12 km + 2 a ritmo',
       segments:[
-        {meters:10000, label:'Rodaje', pace:352, tol:15},
-        {meters:2000,  label:'Últimos 2 km a ritmo', pace:310, tol:10}
+        {meters:10000, label:'Rodaje', pace:340, tol:15},
+        {meters:2000,  label:'Últimos 2 km a ritmo', pace:300, tol:10}
       ]},
 
-    mie04nov: {name:'Mié 4 nov · 3×300 m progresivos', warmup:900, cooldown:900, count:3,
+    // ── SEMANA CARRERA 3-8 NOV ──
+    mie05nov: {name:'Mié 5 nov · 3×300 m progresivos', warmup:900, cooldown:900, count:3,
       work:{meters:300, label:'Progresión', pace:null, tol:null}, rest:{dur:120, label:'Trote suave'}},
 
-    vie06nov: {name:'Vie 6 nov · Activación + 4 progresiones', warmup:900, cooldown:300, count:4,
+    vie07nov: {name:'Vie 7 nov · Activación + 4 progresiones', warmup:900, cooldown:300, count:4,
       work:{meters:100, label:'Progresión', pace:null, tol:null}, rest:{dur:90, label:'Trote suave'}},
   };
 
@@ -717,6 +710,7 @@ select,input[type=number]{
   let workPhaseActive = false;
   let tickHandle = null;
   let alertStreak = 0, alertDir = null, lastAlertTime = 0, alertedDir = null;
+  let phaseAnnounced = {};
 
   function showGpsError(err){
     setupEl.hidden = true; runEl.hidden = true; doneEl.hidden = true; gpsErrorEl.hidden = false;
@@ -754,6 +748,7 @@ select,input[type=number]{
     phaseStartTs = Date.now(); phasePausedAccum = 0;
     workDistanceAccum = 0; paceBuffer = []; workPhaseActive = (p.kind!=='work');
     alertStreak=0; alertDir=null; alertedDir=null;
+    phaseAnnounced = {};
 
     document.getElementById('timeView').hidden = (p.kind==='work');
     document.getElementById('distView').hidden = (p.kind!=='work');
@@ -842,10 +837,34 @@ select,input[type=number]{
         status.hidden = true;
       }
 
-      if(workDistanceAccum >= p.targetMeters){ goToPhase(currentIdx+1); return; }
+      if(workDistanceAccum >= p.targetMeters){
+        beep(880,0.12); setTimeout(function(){ beep(1046,0.16); }, 120);
+        var doneText = p.total>1 ? ('Serie ' + p.rep + ' completada.') : (p.label + ' completado.');
+        speak(doneText);
+        goToPhase(currentIdx+1); return;
+      }
     } else {
       const remaining = p.dur - phaseElapsed();
       document.getElementById('countdown').textContent = fmtMMSS(remaining);
+
+      // 1 minute warning during recovery
+      if(p.kind==='rest' && remaining<=62 && remaining>55 && !phaseAnnounced.oneMin){
+        phaseAnnounced.oneMin = true;
+        beep(550,0.1);
+        speak('Un minuto.');
+      }
+
+      // 3 seconds before next work phase: announce pace
+      if(remaining<=4 && remaining>0.5 && !phaseAnnounced.threeS){
+        var nextP = phases[currentIdx+1];
+        if(nextP && nextP.kind==='work'){
+          phaseAnnounced.threeS = true;
+          beep(770,0.12);
+          var paceText = nextP.pace!=null ? (fmtNum(nextP.targetMeters) + ' metros a ' + fmtPace(nextP.pace) + '.') : (fmtNum(nextP.targetMeters) + ' metros, progresión libre.');
+          speak(paceText);
+        }
+      }
+
       if(remaining<=0){ goToPhase(currentIdx+1); return; }
     }
   }
