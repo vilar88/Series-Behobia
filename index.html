@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Series Behobia</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -143,6 +144,37 @@ select,input[type=number]{
 #done .big,#gpsError .big{font-family:var(--font-display);font-size:1.7rem;font-weight:800;margin-top:0.6rem;}
 #done .stats{font-family:var(--font-mono);color:var(--ink-muted);margin-top:0.6rem;}
 #gpsError p{color:var(--ink-muted);margin-top:0.8rem;line-height:1.6;}
+
+/* ---------------- Resumen de sesión ---------------- */
+#done{max-width:640px;text-align:left;padding:2rem 1rem 3rem;}
+#done .big{font-size:1.45rem;}
+.sum-totals{display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;margin-top:1rem;}
+.sum-tile{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:0.6rem 0.7rem;}
+.sum-tile .k{font-family:var(--font-mono);font-size:0.62rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-muted);}
+.sum-tile .v{font-family:var(--font-display);font-weight:700;font-size:1.15rem;font-variant-numeric:tabular-nums;}
+.sum-sub{font-family:var(--font-mono);font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-muted);margin:1.3rem 0 0.4rem;}
+.sum-table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface);}
+.sum-table{width:100%;border-collapse:collapse;font-size:0.76rem;font-variant-numeric:tabular-nums;}
+.sum-table th,.sum-table td{padding:0.45rem 0.32rem;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;}
+.sum-table th:first-child,.sum-table td:first-child{text-align:left;white-space:normal;}
+.sum-table th{font-family:var(--font-mono);font-size:0.62rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-muted);font-weight:600;}
+.sum-table tr:last-child td{border-bottom:none;}
+.sum-table tr.work td{font-weight:600;}
+.sum-table tr.easy td{color:var(--ink-muted);}
+.sum-table .bad{color:var(--ember-text);}
+.sum-table .good{color:var(--pine);}
+.sum-actions{display:flex;flex-direction:column;gap:0.6rem;margin-top:1.3rem;}
+.sum-actions .big-btn{margin-top:0;}
+.sec-btn{width:100%;padding:0.85rem;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-family:var(--font-display);font-weight:700;font-size:1rem;cursor:pointer;}
+.copy-ok{font-family:var(--font-mono);font-size:0.8rem;color:var(--pine);min-height:1.2em;text-align:center;}
+.status-tag{display:inline-block;margin-left:0.4rem;padding:0.1rem 0.5rem;border-radius:999px;font-family:var(--font-mono);font-size:0.7rem;background:var(--ember-soft);color:var(--ember-text);vertical-align:middle;}
+.status-tag.ok{background:var(--pine-soft);color:var(--pine);}
+
+/* ---------------- Historial ---------------- */
+.hist-item{width:100%;display:block;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:0.75rem 0.9rem;margin-bottom:0.55rem;cursor:pointer;color:var(--ink);}
+.hist-item .h1{font-weight:600;font-size:0.92rem;}
+.hist-item .h2{font-family:var(--font-mono);font-size:0.75rem;color:var(--ink-muted);margin-top:0.15rem;}
+.hist-empty{color:var(--ink-muted);font-size:0.9rem;}
 </style>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -150,7 +182,7 @@ select,input[type=number]{
 
 <!-- ============ SETUP ============ -->
 <div id="setup">
-  <div class="eyebrow">Entrenador · Behobia 2026 · objetivo 1:43</div>
+  <div class="eyebrow">Entrenador · Behobia 2026 · objetivo 1:40</div>
   <h1 class="title">Series Behobia</h1>
   <p class="subtitle">Todas las sesiones del plan, del 5 de septiembre al 8 de noviembre. Mide con tu GPS real y te avisa por voz si te sales del ritmo previsto — también si vas demasiado rápido en los días suaves.</p>
 
@@ -161,6 +193,13 @@ select,input[type=number]{
   <div class="tabs">
     <button class="tab-btn active" id="tabPresetBtn">Sesiones del plan</button>
     <button class="tab-btn" id="tabCustomBtn">Personalizado</button>
+    <button class="tab-btn" id="tabHistBtn">Historial</button>
+  </div>
+
+  <!-- History panel -->
+  <div class="panel" id="panelHist" hidden>
+    <div id="histList"></div>
+    <button class="mini-btn" id="histClearBtn" hidden>Borrar historial</button>
   </div>
 
   <!-- Preset panel -->
@@ -277,10 +316,22 @@ select,input[type=number]{
 
 <!-- ============ DONE ============ -->
 <div id="done" hidden>
-  <div class="eyebrow">Sesión completada</div>
-  <div class="big">Buen trabajo 💪</div>
+  <div class="eyebrow" id="doneEyebrow">Sesión completada</div>
+  <div class="big" id="doneTitle"></div>
   <div class="stats" id="doneStats"></div>
-  <button class="big-btn" id="doneBackBtn" style="max-width:320px;">Volver</button>
+  <div class="sum-totals" id="sumTotals"></div>
+  <div class="sum-sub">Tramos</div>
+  <div class="sum-table-wrap"><table class="sum-table" id="sumSegs"></table></div>
+  <div id="sumSplitsBlock">
+    <div class="sum-sub">Parciales por km</div>
+    <div class="sum-table-wrap"><table class="sum-table" id="sumSplits"></table></div>
+  </div>
+  <div class="sum-actions">
+    <button class="big-btn" id="copyBtn">Copiar para Claude</button>
+    <div class="copy-ok" id="copyOk"></div>
+    <button class="sec-btn" id="shareBtn" hidden>Compartir…</button>
+    <button class="sec-btn" id="doneBackBtn">Volver</button>
+  </div>
 </div>
 
 <!-- ============ GPS ERROR ============ -->
@@ -367,6 +418,10 @@ select,input[type=number]{
 
     vie06nov: {name:'Vie 6 nov · Activación + 4 progresiones', warmup:900, cooldown:300, count:4,
       work:{meters:100, label:'Progresión', pace:null, tol:null}, rest:{dur:90, label:'Trote suave'}},
+
+    // ── SIN PLAN — graba la carrera entera y la terminas tú con "Terminar" ──
+    libre: {name:'Carrera libre (sin objetivo, la terminas tú)', free:true,
+      segments:[{meters:1e9, label:'Carrera libre', pace:null, tol:null}]},
   };
 
   function fmtMMSS(totalSec){
@@ -376,7 +431,8 @@ select,input[type=number]{
   }
   function fmtPace(secPerKm){ return fmtMMSS(secPerKm); }
   function fmtHuman(totalSec){ return Math.round(totalSec/60) + ' min'; }
-  function fmtKm(meters){ return meters>=1000 ? (meters/1000).toFixed(meters%1000===0?0:1)+' km' : meters+' m'; }
+  function fmtKm(meters){ return meters>=1000 ? (meters/1000).toFixed(meters%1000===0?0:1).replace('.',',')+' km' : meters+' m'; }
+  function fmtKm2(meters){ return (meters/1000).toFixed(2).replace('.',','); }
   function fmtNum(n){ return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
 
   function buildPhases(s){
@@ -390,7 +446,7 @@ select,input[type=number]{
           phases.push({kind:'rest', dur:seg.dur, label:seg.label||'Trote suave'});
         } else {
           phases.push({kind:'work', targetMeters:seg.meters, label:seg.label||'Tramo',
-                       pace:(seg.pace!=null?seg.pace:null), tol:(seg.tol!=null?seg.tol:15)});
+                       pace:(seg.pace!=null?seg.pace:null), tol:(seg.tol!=null?seg.tol:15), free:!!s.free});
         }
       });
     } else {
@@ -407,6 +463,7 @@ select,input[type=number]{
   }
 
   function describeFlow(s){
+    if(s.free) return 'Corres a tu aire, sin ritmo objetivo ni avisos de ritmo. Graba distancia, tiempo y parciales, y te canta cada kilómetro. <b>La terminas tú con "Terminar"</b> y te sale el resumen para copiar.';
     const sentences = [];
     if(s.warmup>0) sentences.push('Empiezas con un <b>calentamiento de '+fmtHuman(s.warmup)+'</b> a ritmo suave, para entrar en calor y dar tiempo al GPS a coger buena señal.');
 
@@ -484,10 +541,22 @@ select,input[type=number]{
   function renderPresetSummary(){
     const s = PRESETS[presetSelect.value];
     document.getElementById('presetFlow').innerHTML = describeFlow(s);
-    document.getElementById('presetTotal').textContent =
+    document.getElementById('presetTotal').textContent = s.free ? 'Distancia y duración libres' :
       fmtKm(totalDistance(s)) + ' medidos por GPS · total estimado ≈ ' + fmtHuman(estTotalDuration(s));
   }
   presetSelect.addEventListener('change', renderPresetSummary);
+  // Preselecciona la sesión de hoy o la próxima del plan (según la fecha de la clave: mie07oct, sab24oct…)
+  (function selectNextSession(){
+    const MONTHS = {sep:8, oct:9, nov:10};
+    const now = new Date(); const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const keys = Object.keys(PRESETS);
+    for(let i=0;i<keys.length;i++){
+      const m = keys[i].match(/(\d{2})(sep|oct|nov)$/);
+      if(!m) continue;
+      const d = new Date(2026, MONTHS[m[2]], +m[1]);
+      if(d >= today){ presetSelect.value = keys[i]; return; }
+    }
+  })();
   renderPresetSummary();
 
   // ---------------- Setup: tabs ----------------
@@ -495,15 +564,16 @@ select,input[type=number]{
   const tabCustomBtn = document.getElementById('tabCustomBtn');
   const panelPreset = document.getElementById('panelPreset');
   const panelCustom = document.getElementById('panelCustom');
-  tabPresetBtn.addEventListener('click', function(){
-    tabPresetBtn.classList.add('active'); tabCustomBtn.classList.remove('active');
-    panelPreset.hidden = false; panelCustom.hidden = true;
-  });
-  tabCustomBtn.addEventListener('click', function(){
-    tabCustomBtn.classList.add('active'); tabPresetBtn.classList.remove('active');
-    panelCustom.hidden = false; panelPreset.hidden = true;
-    renderCustomSummary();
-  });
+  const tabHistBtn = document.getElementById('tabHistBtn');
+  const panelHist = document.getElementById('panelHist');
+  function showTab(which){
+    [[tabPresetBtn,panelPreset,'preset'],[tabCustomBtn,panelCustom,'custom'],[tabHistBtn,panelHist,'hist']].forEach(function(t){
+      t[0].classList.toggle('active', t[2]===which); t[1].hidden = (t[2]!==which);
+    });
+  }
+  tabPresetBtn.addEventListener('click', function(){ showTab('preset'); });
+  tabCustomBtn.addEventListener('click', function(){ showTab('custom'); renderCustomSummary(); });
+  tabHistBtn.addEventListener('click', function(){ showTab('hist'); renderHistory(); });
 
   // ---------------- Setup: custom panel ----------------
   const cuNoPace = document.getElementById('cuNoPace');
@@ -591,6 +661,7 @@ select,input[type=number]{
   const gpsBannerText = document.getElementById('gpsBannerText');
   let gpsWatchId = null, lastFix = null, gpsAccuracy = null, gpsOk = false, lastFixTs = 0;
   let totalDistanceAll = 0;
+  let phaseDistAll = 0; // distancia del tramo actual, sea del tipo que sea
   let workDistanceAccum = 0;
   let paceBuffer = []; // {t, d} de los últimos ~18 s, d = distancia acumulada del tramo
 
@@ -629,6 +700,8 @@ select,input[type=number]{
         const speed = d/dt; // m/s
         if(d<2 || speed<=7){ // descarta saltos imposibles (>7 m/s ≈ 2:23/km)
           totalDistanceAll += d;
+          phaseDistAll += d;
+          checkSplit();
           if(currentIdx>=0 && phases[currentIdx] && phases[currentIdx].kind==='work' && workPhaseActive){
             workDistanceAccum += d;
             paceBuffer.push({t:t, d:workDistanceAccum});
@@ -727,10 +800,11 @@ select,input[type=number]{
     phases = buildPhases(s);
     sessionName = name;
     sessionStartTs = Date.now(); pausedAccumTotal = 0; pauseStartTs = null;
-    currentIdx = -1; totalDistanceAll = 0; lastFix = null; gpsOk = false;
+    currentIdx = -1; totalDistanceAll = 0; phaseDistAll = 0; lastFix = null; gpsOk = false;
     document.getElementById('runSessionName').textContent = name;
 
     if(!startGpsWatch()) return;
+    startRecording(name, s);
 
     setupEl.hidden = true; doneEl.hidden = true; gpsErrorEl.hidden = true; runEl.hidden = false;
     running = true;
@@ -741,11 +815,13 @@ select,input[type=number]{
     tickHandle = setInterval(tick, 400);
   }
 
-  function goToPhase(idx){
+  function goToPhase(idx, reason){
+    if(currentIdx>=0) closeSegment(reason || 'done');
     currentIdx = idx;
     if(currentIdx>=phases.length){ finishSession(); return; }
     const p = phases[currentIdx];
-    phaseStartTs = Date.now(); phasePausedAccum = 0;
+    phaseStartTs = Date.now(); phasePausedAccum = 0; phaseDistAll = 0;
+    openSegment(p);
     workDistanceAccum = 0; paceBuffer = []; workPhaseActive = (p.kind!=='work');
     alertStreak=0; alertDir=null; alertedDir=null;
     phaseAnnounced = {};
@@ -778,8 +854,9 @@ select,input[type=number]{
       : '';
   }
 
-  function overallElapsed(){ return (Date.now()-sessionStartTs-pausedAccumTotal)/1000; }
-  function phaseElapsed(){ return (Date.now()-phaseStartTs-phasePausedAccum)/1000; }
+  function curPause(){ return pauseStartTs ? (Date.now()-pauseStartTs) : 0; }
+  function overallElapsed(){ return (Date.now()-sessionStartTs-pausedAccumTotal-curPause())/1000; }
+  function phaseElapsed(){ return (Date.now()-phaseStartTs-phasePausedAccum-curPause())/1000; }
 
   function tick(){
     if(!running) return;
@@ -804,10 +881,21 @@ select,input[type=number]{
           const chip = document.getElementById('paceChip');
           if(p.pace!=null){ chip.hidden=false; chip.textContent = 'Objetivo ' + fmtPace(p.pace) + ' ±' + p.tol + 's/km'; }
           else chip.hidden = true;
-          document.getElementById('paceStatus').hidden = (p.pace==null);
-          const goText = p.total>1 ? ('¡Vamos! ' + p.targetMeters + ' metros.') : ('¡Vamos! ' + fmtKm(p.targetMeters) + '.');
+          document.getElementById('paceStatus').hidden = (p.pace==null && !p.free);
+          document.querySelector('.dist-track').hidden = !!p.free;
+          if(seg) seg.activeAt = phaseElapsed();
+          const goText = p.free ? '¡Vamos! Carrera libre.' : p.total>1 ? ('¡Vamos! ' + p.targetMeters + ' metros.') : ('¡Vamos! ' + fmtKm(p.targetMeters) + '.');
           beep(880,0.16); speak(goText);
         }
+        return;
+      }
+      if(p.free){
+        const el = seg ? Math.max(0, phaseElapsed() - (seg.activeAt||0)) : 0;
+        document.getElementById('metersLeft').innerHTML = fmtKm2(workDistanceAccum) + '<span class="unit">km</span>';
+        document.getElementById('metersCovered').textContent = fmtMMSS(el) + (workDistanceAccum>50 ? ' · media ' + fmtPace(el/workDistanceAccum*1000) + '/km' : '');
+        const cp = currentPaceSecPerKm(), st = document.getElementById('paceStatus');
+        st.className='pace-status'; st.textContent = cp ? ('ahora ' + fmtPace(cp) + '/km') : 'calculando…';
+        maybeSaveDraft();
         return;
       }
       const remaining = Math.max(0, p.targetMeters - workDistanceAccum);
@@ -822,6 +910,7 @@ select,input[type=number]{
           status.className='pace-status'; status.textContent='calculando…';
         } else {
           status.classList.remove('alert');
+          if(seg){ seg.ticks[pace > p.pace + p.tol ? 'slow' : pace < p.pace - p.tol ? 'fast' : 'ok']++; }
           if(pace > p.pace + p.tol){
             status.textContent = fmtPace(pace)+'/km · LENTO';
             evalAlert('slow');
@@ -836,6 +925,7 @@ select,input[type=number]{
       } else {
         status.hidden = true;
       }
+      maybeSaveDraft();
 
       if(workDistanceAccum >= p.targetMeters){
         beep(880,0.12); setTimeout(function(){ beep(1046,0.16); }, 120);
@@ -846,6 +936,7 @@ select,input[type=number]{
     } else {
       const remaining = p.dur - phaseElapsed();
       document.getElementById('countdown').textContent = fmtMMSS(remaining);
+      maybeSaveDraft();
 
       // 1 minute warning during recovery
       if(p.kind==='rest' && remaining<=62 && remaining>55 && !phaseAnnounced.oneMin){
@@ -892,8 +983,9 @@ select,input[type=number]{
     releaseWakeLock();
     beep(1046,0.18); setTimeout(function(){ beep(1318,0.22); }, 180);
     speak('Sesión completada. Buen entrenamiento.');
-    runEl.hidden = true; doneEl.hidden = false;
-    document.getElementById('doneStats').textContent = sessionName + ' · duración ' + fmtMMSS(overallElapsed()) + ' · distancia total medida ' + fmtKm(Math.round(totalDistanceAll));
+    const r = finalizeRecording('completa');
+    runEl.hidden = true;
+    showSummary(r);
   }
 
   document.getElementById('startPresetBtn').addEventListener('click', function(){
@@ -920,7 +1012,7 @@ select,input[type=number]{
 
   document.getElementById('skipBtn').addEventListener('click', function(){
     if(currentIdx<0) return;
-    goToPhase(currentIdx+1);
+    goToPhase(currentIdx+1, 'skip');
   });
 
   let endArmed = false, endTimer = null;
@@ -934,13 +1026,284 @@ select,input[type=number]{
     running=false; if(tickHandle) clearInterval(tickHandle);
     stopGpsWatch(); releaseWakeLock();
     window.speechSynthesis && window.speechSynthesis.cancel();
-    runEl.hidden = true; setupEl.hidden = false;
+    const r = finalizeRecording(PRESETS.libre && sessionName===PRESETS.libre.name ? 'completa' : 'manual');
+    pauseStartTs = null;
+    document.getElementById('pauseBtn').textContent='Pausar';
+    runEl.hidden = true;
     document.getElementById('endBtn').textContent='Terminar';
-    document.getElementById('lastMsg').textContent = 'Última sesión (' + sessionName + ') terminada manualmente a los ' + fmtMMSS(overallElapsed()) + ' · ' + fmtKm(Math.round(totalDistanceAll)) + ' medidos.';
+    document.getElementById('lastMsg').textContent = 'Última sesión: ' + sessionName + ' · ' + fmtMMSS(r.totalTime) + ' · ' + fmtKm2(r.totalDist) + ' km. Está en el Historial.';
+    showSummary(r);
   });
 
   document.getElementById('doneBackBtn').addEventListener('click', function(){
     doneEl.hidden = true; setupEl.hidden = false;
+    if(!panelHist.hidden) renderHistory();
+    window.scrollTo(0,0);
+  });
+
+  // ============================================================
+  //  REGISTRO DE LA SESIÓN
+  //  Guarda cada tramo (distancia, tiempo, ritmo, % en rango) y los
+  //  parciales por km. Se guarda en el móvil (historial) y se puede
+  //  copiar como texto. Si iOS mata la app a mitad, el borrador se
+  //  recupera al volver a abrirla como sesión "interrumpida".
+  // ============================================================
+  const HIST_KEY = 'seriesBehobia.history.v1', DRAFT_KEY = 'seriesBehobia.draft.v1', HIST_MAX = 60;
+  let rec = null, seg = null, nextSplitAt = 1000, lastSplitT = 0, lastDraftSave = 0;
+
+  function lsGet(k){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; }catch(e){ return null; } }
+  function lsSet(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ return false; } }
+  function lsDel(k){ try{ localStorage.removeItem(k); }catch(e){} }
+
+  function planText(s){
+    if(s.free) return 'Carrera libre, sin ritmo objetivo';
+    const parts = [];
+    if(s.warmup>0) parts.push(Math.round(s.warmup/60) + "' calentamiento");
+    if(s.segments && s.segments.length){
+      s.segments.forEach(function(sg){
+        if(sg.dur) parts.push(fmtMMSS(sg.dur) + ' trote');
+        else parts.push(fmtKm(sg.meters) + (sg.pace!=null ? ' a ' + fmtPace(sg.pace) + ' (±' + sg.tol + ')' : ''));
+      });
+    } else {
+      const w = s.work;
+      parts.push((s.count>1 ? s.count + '×' : '') + (w.meters>=1000 && s.count===1 ? fmtKm(w.meters) : fmtNum(w.meters) + ' m') +
+        (w.pace!=null ? ' a ' + fmtPace(w.pace) + ' (±' + w.tol + ')' : ' progresivos'));
+      if(s.rest && s.rest.dur>0 && s.count>1) parts.push('rec. ' + fmtMMSS(s.rest.dur));
+    }
+    if(s.cooldown>0) parts.push(Math.round(s.cooldown/60) + "' enfriamiento");
+    return parts.join(' · ');
+  }
+
+  function startRecording(name, s){
+    rec = {id:Date.now(), name:name, startedAt:Date.now(), plan:planText(s), segs:[], splits:[],
+           totalDist:0, totalTime:0, status:'en curso'};
+    seg = null; nextSplitAt = 1000; lastSplitT = 0; lastDraftSave = 0;
+  }
+
+  function openSegment(p){
+    seg = {kind:p.kind, label:p.label, rep:p.rep||null, total:p.total||null,
+           target:p.kind==='work' && !p.free ? p.targetMeters : null, plannedDur:p.dur||null,
+           pace:p.pace!=null ? p.pace : null, tol:p.tol!=null ? p.tol : null, free:!!p.free,
+           activeAt:(p.kind==='work' ? null : 0), ticks:{ok:0, slow:0, fast:0}};
+  }
+
+  function closeSegment(reason){
+    if(!rec || !seg) return;
+    const p = phases[currentIdx];
+    const el = phaseElapsed();
+    if(seg.kind==='work'){
+      seg.dist = Math.round(workDistanceAccum);
+      seg.time = seg.activeAt==null ? 0 : Math.max(0, el - seg.activeAt);
+    } else {
+      seg.dist = Math.round(phaseDistAll);
+      seg.time = Math.max(0, el);
+    }
+    seg.time = Math.round(seg.time*10)/10;
+    seg.end = reason; // done | skip | manual
+    rec.segs.push(seg);
+    seg = null;
+    saveDraft();
+  }
+
+  function checkSplit(){
+    if(!rec) return;
+    while(totalDistanceAll >= nextSplitAt){
+      const t = overallElapsed();
+      const sp = t - lastSplitT;
+      rec.splits.push(Math.round(sp));
+      lastSplitT = t; nextSplitAt += 1000;
+      const p = phases[currentIdx];
+      if(p && p.free){ speak('Kilómetro ' + rec.splits.length + '. ' + paceWords(sp) + '.'); }
+    }
+  }
+  function paceWords(sec){
+    sec = Math.round(sec); const m = Math.floor(sec/60), s = sec%60;
+    return m + (s ? ' ' + s : ' minutos');
+  }
+
+  function snapshot(status){
+    const r = JSON.parse(JSON.stringify(rec));
+    r.totalDist = Math.round(totalDistanceAll);
+    r.totalTime = Math.round(overallElapsed());
+    const lastD = totalDistanceAll - (nextSplitAt - 1000);
+    if(lastD >= 50) r.lastSplit = {dist:Math.round(lastD), time:Math.round(r.totalTime - lastSplitT)};
+    r.status = status;
+    return r;
+  }
+  function saveDraft(){ if(rec){ lsSet(DRAFT_KEY, snapshot('interrumpida')); lastDraftSave = Date.now(); } }
+  function maybeSaveDraft(){ if(Date.now() - lastDraftSave > 20000) saveDraft(); }
+
+  function finalizeRecording(status){
+    if(!rec) return null;
+    if(seg) closeSegment(status==='completa' ? 'done' : 'manual');
+    const r = snapshot(status);
+    const hist = lsGet(HIST_KEY) || [];
+    hist.unshift(r);
+    lsSet(HIST_KEY, hist.slice(0, HIST_MAX));
+    lsDel(DRAFT_KEY);
+    rec = null;
+    return r;
+  }
+
+  // Sesión que se quedó a medias (iOS cerró la app, se acabó la batería…)
+  (function recoverDraft(){
+    const d = lsGet(DRAFT_KEY);
+    if(!d) return;
+    const hist = lsGet(HIST_KEY) || [];
+    if(!hist.some(function(h){ return h.id===d.id; })){ hist.unshift(d); lsSet(HIST_KEY, hist.slice(0, HIST_MAX)); }
+    lsDel(DRAFT_KEY);
+    document.getElementById('lastMsg').textContent = 'Se recuperó una sesión que se cortó a medias (' + d.name + '). Está en el Historial.';
+  })();
+
+  // ---------------- Presentación del resumen ----------------
+  function segName(sg){
+    if(sg.kind==='warmup') return 'Calentamiento';
+    if(sg.kind==='cooldown') return 'Enfriamiento';
+    if(sg.kind==='rest') return 'Recuperación' + (sg.rep ? ' ' + sg.rep : '');
+    if(sg.total>1) return 'Serie ' + sg.rep + '/' + sg.total;
+    return sg.label;
+  }
+  function segPace(sg){ return sg.dist>=50 && sg.time>0 ? sg.time/sg.dist*1000 : null; }
+  function rangePct(sg){
+    const n = sg.ticks.ok + sg.ticks.slow + sg.ticks.fast;
+    if(!n || sg.pace==null) return null;
+    return {ok:Math.round(100*sg.ticks.ok/n), slow:Math.round(100*sg.ticks.slow/n), fast:Math.round(100*sg.ticks.fast/n)};
+  }
+  function segNote(sg){
+    if(sg.kind==='work' && sg.target && sg.dist < sg.target - 15){
+      return (sg.end==='skip' ? 'saltada' : sg.end==='manual' ? 'cortada' : 'incompleta') + ' (' + fmtNum(sg.dist) + ' de ' + fmtNum(sg.target) + ' m)';
+    }
+    if(sg.kind!=='work' && sg.plannedDur && sg.time < sg.plannedDur - 3){
+      return (sg.end==='skip' ? 'saltado' : 'cortado') + ' (' + fmtMMSS(sg.time) + ' de ' + fmtMMSS(sg.plannedDur) + ')';
+    }
+    return '';
+  }
+  function fmtDate(ts){
+    const d = new Date(ts);
+    return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear() +
+      ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  }
+  function statusLabel(st){ return st==='completa' ? 'completa' : st==='manual' ? 'terminada a mano' : 'interrumpida'; }
+
+  function summaryText(r){
+    const L = [];
+    const avg = r.totalDist>50 ? fmtPace(r.totalTime/r.totalDist*1000) + '/km' : '—';
+    L.push('SESIÓN: ' + r.name);
+    L.push('Fecha: ' + fmtDate(r.startedAt) + ' · ' + statusLabel(r.status));
+    L.push('Plan: ' + r.plan);
+    L.push('Total: ' + fmtKm2(r.totalDist) + ' km · ' + fmtMMSS(r.totalTime) + ' · ' + avg);
+    L.push('');
+    L.push('TRAMOS');
+    r.segs.forEach(function(sg){
+      const pc = segPace(sg), rp = rangePct(sg), note = segNote(sg);
+      let line = '- ' + segName(sg) + ': ' + (sg.dist>=1000 ? fmtKm2(sg.dist) + ' km' : fmtNum(sg.dist) + ' m') + ' en ' + fmtMMSS(sg.time);
+      if(pc) line += ' → ' + fmtPace(pc) + '/km';
+      if(sg.pace!=null) line += ' (obj. ' + fmtPace(sg.pace) + ' ±' + sg.tol + ')';
+      if(rp) line += ' · en rango ' + rp.ok + '%, lento ' + rp.slow + '%, rápido ' + rp.fast + '%';
+      if(note) line += ' · ' + note;
+      L.push(line);
+    });
+    if(r.splits.length || r.lastSplit){
+      L.push('');
+      L.push('PARCIALES POR KM');
+      const sp = r.splits.map(function(s,i){ return (i+1) + ': ' + fmtMMSS(s); });
+      if(r.lastSplit) sp.push(fmtKm2(r.lastSplit.dist) + ' km finales: ' + fmtPace(r.lastSplit.time/r.lastSplit.dist*1000) + '/km');
+      L.push(sp.join(' · '));
+    }
+    return L.join('\n');
+  }
+
+  let shownRec = null;
+  function showSummary(r){
+    shownRec = r;
+    setupEl.hidden = true; runEl.hidden = true; gpsErrorEl.hidden = true; doneEl.hidden = false;
+    window.scrollTo(0,0);
+    const ok = r.status==='completa';
+    document.getElementById('doneEyebrow').innerHTML = 'Resumen · ' + fmtDate(r.startedAt) +
+      ' <span class="status-tag' + (ok?' ok':'') + '">' + statusLabel(r.status) + '</span>';
+    document.getElementById('doneTitle').textContent = r.name;
+    document.getElementById('doneStats').textContent = 'Plan: ' + r.plan;
+    const avg = r.totalDist>50 ? fmtPace(r.totalTime/r.totalDist*1000) : '—';
+    document.getElementById('sumTotals').innerHTML =
+      '<div class="sum-tile"><div class="k">Distancia</div><div class="v">' + fmtKm2(r.totalDist) + ' km</div></div>' +
+      '<div class="sum-tile"><div class="k">Tiempo</div><div class="v">' + fmtMMSS(r.totalTime) + '</div></div>' +
+      '<div class="sum-tile"><div class="k">Ritmo medio</div><div class="v">' + avg + '</div></div>';
+
+    let h = '<tr><th>Tramo</th><th>Dist.</th><th>Tiempo</th><th>Ritmo</th><th>Obj.</th><th>Rango</th></tr>';
+    r.segs.forEach(function(sg){
+      const pc = segPace(sg), rp = rangePct(sg), note = segNote(sg);
+      let paceCls = '';
+      if(pc && sg.pace!=null) paceCls = Math.abs(pc - sg.pace) <= sg.tol ? 'good' : 'bad';
+      h += '<tr class="' + (sg.kind==='work' ? 'work' : 'easy') + '">' +
+        '<td>' + segName(sg) + (note ? '<br><span class="bad" style="font-weight:400;font-size:0.72rem;">' + note + '</span>' : '') + '</td>' +
+        '<td>' + (sg.dist>=1000 ? fmtKm2(sg.dist) + ' km' : fmtNum(sg.dist) + ' m') + '</td>' +
+        '<td>' + fmtMMSS(sg.time) + '</td>' +
+        '<td class="' + paceCls + '">' + (pc ? fmtPace(pc) : '—') + '</td>' +
+        '<td>' + (sg.pace!=null ? fmtPace(sg.pace) : '') + '</td>' +
+        '<td>' + (rp ? rp.ok + '%' : '') + '</td></tr>';
+    });
+    document.getElementById('sumSegs').innerHTML = h;
+
+    const hasSplits = r.splits.length || r.lastSplit;
+    document.getElementById('sumSplitsBlock').hidden = !hasSplits;
+    if(hasSplits){
+      let sh = '<tr><th>Km</th><th>Ritmo</th></tr>';
+      r.splits.forEach(function(s,i){ sh += '<tr><td>' + (i+1) + '</td><td>' + fmtMMSS(s) + '</td></tr>'; });
+      if(r.lastSplit) sh += '<tr><td>' + fmtKm2(r.lastSplit.dist) + '</td><td>' + fmtPace(r.lastSplit.time/r.lastSplit.dist*1000) + '</td></tr>';
+      document.getElementById('sumSplits').innerHTML = sh;
+    }
+    document.getElementById('copyOk').textContent = '';
+    document.getElementById('shareBtn').hidden = !navigator.share;
+  }
+
+  function copyText(text){
+    function fallback(){
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly',''); ta.style.position='fixed'; ta.style.top='-1000px';
+      document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
+      let ok = false; try{ ok = document.execCommand('copy'); }catch(e){}
+      document.body.removeChild(ta); return ok;
+    }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      return navigator.clipboard.writeText(text).then(function(){ return true; }, function(){ return fallback(); });
+    }
+    return Promise.resolve(fallback());
+  }
+  document.getElementById('copyBtn').addEventListener('click', function(){
+    if(!shownRec) return;
+    copyText(summaryText(shownRec)).then(function(ok){
+      document.getElementById('copyOk').textContent = ok ? 'Copiado. Pégalo en el chat con Claude.' : 'No se pudo copiar: usa "Compartir…".';
+    });
+  });
+  document.getElementById('shareBtn').addEventListener('click', function(){
+    if(!shownRec || !navigator.share) return;
+    navigator.share({title: shownRec.name, text: summaryText(shownRec)}).catch(function(){});
+  });
+
+  // ---------------- Historial ----------------
+  function renderHistory(){
+    const hist = lsGet(HIST_KEY) || [];
+    const list = document.getElementById('histList');
+    document.getElementById('histClearBtn').hidden = !hist.length;
+    if(!hist.length){ list.innerHTML = '<p class="hist-empty">Todavía no hay sesiones grabadas. Al terminar cada una aparecerá aquí.</p>'; return; }
+    list.innerHTML = '';
+    hist.forEach(function(r){
+      const b = document.createElement('button');
+      b.className = 'hist-item';
+      const avg = r.totalDist>50 ? fmtPace(r.totalTime/r.totalDist*1000) + '/km' : '—';
+      b.innerHTML = '<div class="h1"></div><div class="h2"></div>';
+      b.querySelector('.h1').textContent = r.name;
+      b.querySelector('.h2').textContent = fmtDate(r.startedAt) + ' · ' + fmtKm2(r.totalDist) + ' km · ' + fmtMMSS(r.totalTime) + ' · ' + avg + ' · ' + statusLabel(r.status);
+      b.addEventListener('click', function(){ showSummary(r); });
+      list.appendChild(b);
+    });
+  }
+  let clearArmed = false;
+  document.getElementById('histClearBtn').addEventListener('click', function(){
+    const btn = this;
+    if(!clearArmed){ clearArmed = true; btn.textContent = '¿Seguro? Toca de nuevo'; setTimeout(function(){ clearArmed=false; btn.textContent='Borrar historial'; }, 3000); return; }
+    clearArmed = false; btn.textContent = 'Borrar historial';
+    lsDel(HIST_KEY); renderHistory();
   });
 })();
 </script>
