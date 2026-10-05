@@ -290,6 +290,10 @@ select,input[type=number]{
 
     <div id="timeView">
       <div class="countdown tabular" id="countdown">10:00</div>
+      <div class="pace-row" id="tPaceRow" hidden>
+        <div class="pace-chip" id="tPaceChip">Objetivo 6:00 ±15s/km</div>
+        <div class="pace-status" id="tPaceStatus">— /km</div>
+      </div>
     </div>
 
     <div id="distView" hidden>
@@ -348,13 +352,27 @@ select,input[type=number]{
 
   // ============================================================
   //  PLAN BEHOBIA 2026 — 10 semanas, 31 ago a 8 nov
-  //  Objetivo 1:43:00 (5:09/km) · ambicioso 1:40:00 (5:00/km)
+  //  Objetivo 1:40:00 (5:00/km) · techo 1:37:00 (4:51/km)
   //
   //  Dos formatos de sesión:
   //   · count + work + rest  → series repetidas con recuperación
   //   · segments[]           → tramos encadenados, cada uno con su ritmo
   //  Ritmos en segundos por km. tol = margen (±) antes del aviso de voz.
   // ============================================================
+  // Ritmo de calentamiento y enfriamiento (se puede fijar por sesión con warmupPace / cooldownPace)
+  const EASY_PACE = 360, EASY_TOL = 15;   // 6:00/km ±15 s
+  const WARMUP_GRACE = 60;                // primeros 60 s del calentamiento sin avisos de ritmo
+
+  // Sensibilidad de los avisos de ritmo
+  //  · normal: ventana de 18 s, ~6 s fuera de rango para avisar, 16 s entre avisos
+  //  · series cortas (≤ 1.000 m con ritmo): ventana de 10 s, ~3 s fuera de rango, 10 s entre avisos
+  //  · tramos largos (> 5 km con ritmo): ventana de 30 s, ~20 s fuera de rango, 16 s entre avisos
+  const SHORT_REP_MAX = 1000, LONG_SEG_MIN = 5000;
+  const SENS_LONG   = {win:30000, sustain:50, gap:16000};
+  const SENS_NORMAL = {win:18000, sustain:15, gap:16000};
+  const SENS_SHORT  = {win:10000, sustain:8,  gap:10000};
+  let sens = SENS_NORMAL;
+
   const PRESETS = {
     // ── VACACIONES ITALIA 19-26 SEP — MINI-CAMP (3 días, ≤40 min) ──
     dom20sep: {name:'Dom 20 sep · 5×1.000 m rápidas (viaje)', warmup:300, cooldown:300, count:5,
@@ -437,7 +455,8 @@ select,input[type=number]{
 
   function buildPhases(s){
     const phases=[];
-    if(s.warmup>0) phases.push({kind:'warmup', dur:s.warmup, label:'Calentamiento'});
+    if(s.warmup>0) phases.push({kind:'warmup', dur:s.warmup, label:'Calentamiento',
+                                pace:(s.warmupPace!=null?s.warmupPace:EASY_PACE), tol:EASY_TOL});
 
     if(s.segments && s.segments.length){
       // tramos encadenados: cada uno con su propio ritmo, sin contador de series
@@ -458,14 +477,15 @@ select,input[type=number]{
       }
     }
 
-    if(s.cooldown>0) phases.push({kind:'cooldown', dur:s.cooldown, label:'Enfriamiento'});
+    if(s.cooldown>0) phases.push({kind:'cooldown', dur:s.cooldown, label:'Enfriamiento',
+                                  pace:(s.cooldownPace!=null?s.cooldownPace:EASY_PACE), tol:EASY_TOL});
     return phases;
   }
 
   function describeFlow(s){
     if(s.free) return 'Corres a tu aire, sin ritmo objetivo ni avisos de ritmo. Graba distancia, tiempo y parciales, y te canta cada kilómetro. <b>La terminas tú con "Terminar"</b> y te sale el resumen para copiar.';
     const sentences = [];
-    if(s.warmup>0) sentences.push('Empiezas con un <b>calentamiento de '+fmtHuman(s.warmup)+'</b> a ritmo suave, para entrar en calor y dar tiempo al GPS a coger buena señal.');
+    if(s.warmup>0) sentences.push('Empiezas con un <b>calentamiento de '+fmtHuman(s.warmup)+'</b> a <b>'+fmtPace(s.warmupPace!=null?s.warmupPace:EASY_PACE)+' min/km</b> (±'+EASY_TOL+' s), para entrar en calor y dar tiempo al GPS a coger buena señal. 10 segundos antes de acabar te canta el tramo que viene.');
 
     if(s.segments && s.segments.length){
       const parts = s.segments.map(function(seg){
@@ -502,7 +522,7 @@ select,input[type=number]{
       }
     }
 
-    if(s.cooldown>0) sentences.push('Terminas con un <b>enfriamiento de '+fmtHuman(s.cooldown)+'</b> a ritmo suave.');
+    if(s.cooldown>0) sentences.push('Terminas con un <b>enfriamiento de '+fmtHuman(s.cooldown)+'</b> a <b>'+fmtPace(s.cooldownPace!=null?s.cooldownPace:EASY_PACE)+' min/km</b> (±'+EASY_TOL+' s).');
 
     return sentences.join('<br><br>');
   }
@@ -702,11 +722,14 @@ select,input[type=number]{
           totalDistanceAll += d;
           phaseDistAll += d;
           checkSplit();
-          if(currentIdx>=0 && phases[currentIdx] && phases[currentIdx].kind==='work' && workPhaseActive){
+          const cp = currentIdx>=0 ? phases[currentIdx] : null;
+          if(cp && cp.kind==='work' && workPhaseActive){
             workDistanceAccum += d;
             paceBuffer.push({t:t, d:workDistanceAccum});
-            while(paceBuffer.length>1 && (t - paceBuffer[0].t) > 18000) paceBuffer.shift();
+          } else if(cp && cp.kind!=='work'){
+            paceBuffer.push({t:t, d:phaseDistAll});
           }
+          while(paceBuffer.length>1 && (t - paceBuffer[0].t) > sens.win) paceBuffer.shift();
         }
       }
     }
@@ -825,8 +848,17 @@ select,input[type=number]{
     workDistanceAccum = 0; paceBuffer = []; workPhaseActive = (p.kind!=='work');
     alertStreak=0; alertDir=null; alertedDir=null;
     phaseAnnounced = {};
+    const paced = p.kind==='work' && p.pace!=null && !p.free;
+    sens = (paced && p.targetMeters<=SHORT_REP_MAX) ? SENS_SHORT :
+           (paced && p.targetMeters>LONG_SEG_MIN) ? SENS_LONG : SENS_NORMAL;
 
     document.getElementById('timeView').hidden = (p.kind==='work');
+    const tRow = document.getElementById('tPaceRow');
+    tRow.hidden = !(p.kind!=='work' && p.pace!=null);
+    if(!tRow.hidden){
+      document.getElementById('tPaceChip').textContent = 'Objetivo ' + fmtPace(p.pace) + ' ±' + p.tol + 's/km';
+      const ts = document.getElementById('tPaceStatus'); ts.className='pace-status'; ts.textContent='calculando…';
+    }
     document.getElementById('distView').hidden = (p.kind!=='work');
 
     if(p.kind==='work'){
@@ -837,8 +869,8 @@ select,input[type=number]{
       beep(660,0.14); speak(introText);
     } else {
       const text =
-        p.kind==='warmup' ? ('Calentamiento, ' + Math.round(p.dur/60) + ' minutos, ritmo suave.') :
-        p.kind==='cooldown' ? ('Enfriamiento, ' + Math.round(p.dur/60) + ' minutos, ritmo suave. Buen trabajo.') :
+        p.kind==='warmup' ? ('Calentamiento, ' + minWords(p.dur) + ' a ' + paceWords(p.pace) + '.') :
+        p.kind==='cooldown' ? ('Buen trabajo. Enfriamiento, ' + minWords(p.dur) + ' a ' + paceWords(p.pace) + '.') :
         ('Recuperación. ' + p.label + '.');
       const tone = p.kind==='rest' ? 440 : 660;
       beep(tone,0.14); speak(text);
@@ -927,6 +959,17 @@ select,input[type=number]{
       }
       maybeSaveDraft();
 
+      // Hitos del tramo a ritmo: mitad y último 10 %
+      if(p.pace!=null && workDistanceAccum < p.targetMeters){
+        if(!phaseAnnounced.half && workDistanceAccum >= p.targetMeters*0.5){
+          phaseAnnounced.half = true;
+          announce('Mitad. Quedan ' + metersWords(p.targetMeters*0.5) + '.', 700);
+        } else if(!phaseAnnounced.last10 && workDistanceAccum >= p.targetMeters*0.9){
+          phaseAnnounced.half = true; phaseAnnounced.last10 = true;
+          announce('Quedan ' + metersWords(p.targetMeters*0.1) + '.', 700);
+        }
+      }
+
       if(workDistanceAccum >= p.targetMeters){
         beep(880,0.12); setTimeout(function(){ beep(1046,0.16); }, 120);
         var doneText = p.total>1 ? ('Serie ' + p.rep + ' completada.') : (p.label + ' completado.');
@@ -938,6 +981,28 @@ select,input[type=number]{
       document.getElementById('countdown').textContent = fmtMMSS(remaining);
       maybeSaveDraft();
 
+      // Ritmo en calentamiento / enfriamiento
+      if(p.pace!=null){
+        const ts = document.getElementById('tPaceStatus');
+        const pace = currentPaceSecPerKm();
+        const inGrace = p.kind==='warmup' && phaseElapsed() < WARMUP_GRACE;
+        if(pace==null){
+          ts.className='pace-status'; ts.textContent='calculando…';
+        } else {
+          ts.classList.remove('alert');
+          const dir = pace > p.pace + p.tol ? 'slow' : pace < p.pace - p.tol ? 'fast' : null;
+          if(seg && !inGrace) seg.ticks[dir || 'ok']++;
+          ts.textContent = fmtPace(pace) + '/km · ' + (dir==='slow' ? 'LENTO' : dir==='fast' ? 'RÁPIDO' : 'bien');
+          if(!inGrace && remaining > 14) evalAlert(dir, ts);
+        }
+      }
+
+      // 10 s antes de acabar calentamiento / enfriamiento: avisa de lo que viene
+      if((p.kind==='warmup' || p.kind==='cooldown') && remaining<=10.5 && remaining>1 && !phaseAnnounced.tenS){
+        phaseAnnounced.tenS = true;
+        announce('En 10 segundos, ' + upcomingWords(phases[currentIdx+1]) + '.', 770);
+      }
+
       // 1 minute warning during recovery
       if(p.kind==='rest' && remaining<=62 && remaining>55 && !phaseAnnounced.oneMin){
         phaseAnnounced.oneMin = true;
@@ -946,7 +1011,7 @@ select,input[type=number]{
       }
 
       // 3 seconds before next work phase: announce pace
-      if(remaining<=4 && remaining>0.5 && !phaseAnnounced.threeS){
+      if(p.kind==='rest' && remaining<=4 && remaining>0.5 && !phaseAnnounced.threeS){
         var nextP = phases[currentIdx+1];
         if(nextP && nextP.kind==='work'){
           phaseAnnounced.threeS = true;
@@ -960,13 +1025,14 @@ select,input[type=number]{
     }
   }
 
-  function evalAlert(dir){
+  function evalAlert(dir, el){
+    el = el || document.getElementById('paceStatus');
     // tick cada 400 ms; exige desviación sostenida antes de hablar, para aguantar el ruido del GPS
     if(dir===alertDir){ alertStreak++; } else { alertDir=dir; alertStreak=1; }
     const now = Date.now();
-    if(dir && alertStreak>=15 && (now-lastAlertTime)>16000){ // ~6 s sostenidos, luego 16 s de silencio
+    if(dir && alertStreak>=sens.sustain && (now-lastAlertTime)>sens.gap){ // ~6 s sostenidos, luego 16 s de silencio
       lastAlertTime = now; alertedDir = dir;
-      document.getElementById('paceStatus').classList.add('alert');
+      el.classList.add('alert');
       beep(dir==='slow'?520:1050, 0.15);
       speak(dir==='slow' ? 'Vas lento.' : 'Vas rápido.');
     }
@@ -974,6 +1040,36 @@ select,input[type=number]{
       alertedDir=null;
       beep(880,0.08); setTimeout(function(){ beep(1100,0.12); }, 100);
     }
+  }
+
+  // Aviso de voz que no debe pisarse con "Vas rápido / lento" en los segundos siguientes
+  function announce(text, tone){
+    lastAlertTime = Date.now() - (sens.gap - 10000); // 10 s de margen antes de otro aviso de ritmo
+    beep(tone||700, 0.12);
+    speak(text);
+  }
+  function minWords(sec){ const m = Math.round(sec/60); return m + (m===1 ? ' minuto' : ' minutos'); }
+  function metersWords(m){
+    m = m>=100 ? Math.round(m/10)*10 : Math.round(m);
+    return m + ' metros';
+  }
+  function distWords(m){
+    if(m>=1000){
+      const km = m/1000;
+      const kmTxt = (km%1===0 ? String(km) : km.toFixed(1).replace('.',' coma '));
+      return kmTxt + (km===1 ? ' kilómetro' : ' kilómetros');
+    }
+    return m + ' metros';
+  }
+  function upcomingWords(n){
+    if(!n) return 'terminas la sesión';
+    if(n.kind==='work'){
+      const head = n.total>1 ? ('serie ' + n.rep + ' de ' + n.total + ', ') : '';
+      return head + distWords(n.targetMeters) + (n.pace!=null ? ' a ' + paceWords(n.pace) : ', progresión libre');
+    }
+    if(n.kind==='cooldown') return 'enfriamiento, ' + minWords(n.dur) + ' a ' + paceWords(n.pace);
+    if(n.kind==='warmup') return 'calentamiento';
+    return 'recuperación, ' + fmtMMSS(n.dur) + ' de trote';
   }
 
   function finishSession(){
@@ -1058,7 +1154,7 @@ select,input[type=number]{
   function planText(s){
     if(s.free) return 'Carrera libre, sin ritmo objetivo';
     const parts = [];
-    if(s.warmup>0) parts.push(Math.round(s.warmup/60) + "' calentamiento");
+    if(s.warmup>0) parts.push(Math.round(s.warmup/60) + "' calentamiento a " + fmtPace(s.warmupPace!=null?s.warmupPace:EASY_PACE));
     if(s.segments && s.segments.length){
       s.segments.forEach(function(sg){
         if(sg.dur) parts.push(fmtMMSS(sg.dur) + ' trote');
@@ -1070,7 +1166,7 @@ select,input[type=number]{
         (w.pace!=null ? ' a ' + fmtPace(w.pace) + ' (±' + w.tol + ')' : ' progresivos'));
       if(s.rest && s.rest.dur>0 && s.count>1) parts.push('rec. ' + fmtMMSS(s.rest.dur));
     }
-    if(s.cooldown>0) parts.push(Math.round(s.cooldown/60) + "' enfriamiento");
+    if(s.cooldown>0) parts.push(Math.round(s.cooldown/60) + "' enfriamiento a " + fmtPace(s.cooldownPace!=null?s.cooldownPace:EASY_PACE));
     return parts.join(' · ');
   }
 
