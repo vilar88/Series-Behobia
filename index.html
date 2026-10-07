@@ -362,6 +362,10 @@ select,input[type=number]{
   // Ritmo de calentamiento y enfriamiento (se puede fijar por sesión con warmupPace / cooldownPace)
   const EASY_PACE = 360, EASY_TOL = 15;   // 6:00/km ±15 s
   const WARMUP_GRACE = 60;                // primeros 60 s del calentamiento sin avisos de ritmo
+  // Ritmo de las recuperaciones entre series (se puede fijar por sesión con restPace)
+  //  · solo avisa si vas RÁPIDO: ir más lento o andar un rato en la recuperación está bien
+  const REST_PACE = 390, REST_TOL = 15;   // 6:30/km ±15 s
+  const REST_GRACE = 20;                  // primeros 20 s de la recuperación sin avisos (frenando tras la serie)
 
   // Sensibilidad de los avisos de ritmo
   //  · normal: ventana de 18 s, ~6 s fuera de rango para avisar, 16 s entre avisos
@@ -462,7 +466,8 @@ select,input[type=number]{
       // tramos encadenados: cada uno con su propio ritmo, sin contador de series
       s.segments.forEach(function(seg){
         if(seg.dur){
-          phases.push({kind:'rest', dur:seg.dur, label:seg.label||'Trote suave'});
+          phases.push({kind:'rest', dur:seg.dur, label:seg.label||'Trote suave',
+                       pace:(s.restPace!=null?s.restPace:REST_PACE), tol:REST_TOL});
         } else {
           phases.push({kind:'work', targetMeters:seg.meters, label:seg.label||'Tramo',
                        pace:(seg.pace!=null?seg.pace:null), tol:(seg.tol!=null?seg.tol:15), free:!!s.free});
@@ -472,7 +477,8 @@ select,input[type=number]{
       for(let i=0;i<s.count;i++){
         phases.push({kind:'work', targetMeters:s.work.meters, label:s.work.label, pace:s.work.pace, tol:s.work.tol, rep:i+1, total:s.count});
         if(s.rest && s.rest.dur>0 && i<s.count-1){
-          phases.push({kind:'rest', dur:s.rest.dur, label:s.rest.label, rep:i+1, total:s.count});
+          phases.push({kind:'rest', dur:s.rest.dur, label:s.rest.label, rep:i+1, total:s.count,
+                       pace:(s.restPace!=null?s.restPace:REST_PACE), tol:REST_TOL});
         }
       }
     }
@@ -489,7 +495,7 @@ select,input[type=number]{
 
     if(s.segments && s.segments.length){
       const parts = s.segments.map(function(seg){
-        if(seg.dur) return '<b>'+fmtMMSS(seg.dur)+'</b> de trote suave';
+        if(seg.dur) return '<b>'+fmtMMSS(seg.dur)+'</b> de trote suave a <b>'+fmtPace(s.restPace!=null?s.restPace:REST_PACE)+' min/km</b>';
         return '<b>'+fmtKm(seg.meters)+'</b>'+(seg.pace!=null ? ' a <b>'+fmtPace(seg.pace)+' min/km</b>' : '');
       });
       if(parts.length===1){
@@ -515,7 +521,7 @@ select,input[type=number]{
         const kind = hasPace ? 'series' : 'progresiones';
         sentences.push('El cuerpo del entreno son <b>'+s.count+' '+kind+' de '+distTxt+'</b> cada una'+paceExplain);
         if(s.rest && s.rest.dur>0){
-          sentences.push('Entre cada '+(hasPace?'serie':'progresión')+' hay <b>'+fmtMMSS(s.rest.dur)+'</b> de trote suave de recuperación antes de la siguiente.');
+          sentences.push('Entre cada '+(hasPace?'serie':'progresión')+' hay <b>'+fmtMMSS(s.rest.dur)+'</b> de trote suave de recuperación a <b>'+fmtPace(s.restPace!=null?s.restPace:REST_PACE)+' min/km</b>. Solo te avisa si vas rápido: si vas más lento o andas un rato, no dice nada.');
         } else {
           sentences.push('Las '+kind+' van seguidas, sin recuperación entre ellas.');
         }
@@ -871,7 +877,7 @@ select,input[type=number]{
       const text =
         p.kind==='warmup' ? ('Calentamiento, ' + minWords(p.dur) + ' a ' + paceWords(p.pace) + '.') :
         p.kind==='cooldown' ? ('Buen trabajo. Enfriamiento, ' + minWords(p.dur) + ' a ' + paceWords(p.pace) + '.') :
-        ('Recuperación. ' + p.label + '.');
+        ('Recuperación' + (p.pace!=null ? ', a ' + paceWords(p.pace) : '. ' + p.label) + '.');
       const tone = p.kind==='rest' ? 440 : 660;
       beep(tone,0.14); speak(text);
     }
@@ -985,15 +991,20 @@ select,input[type=number]{
       if(p.pace!=null){
         const ts = document.getElementById('tPaceStatus');
         const pace = currentPaceSecPerKm();
-        const inGrace = p.kind==='warmup' && phaseElapsed() < WARMUP_GRACE;
+        const inGrace = (p.kind==='warmup' && phaseElapsed() < WARMUP_GRACE) ||
+                        (p.kind==='rest' && phaseElapsed() < REST_GRACE);
+        // en la recuperación no molesta con "Vas lento", ni pisa el aviso de "Un minuto"
+        const quiet = p.kind==='rest' && remaining < 66 && remaining > 53;
         if(pace==null){
           ts.className='pace-status'; ts.textContent='calculando…';
         } else {
           ts.classList.remove('alert');
           const dir = pace > p.pace + p.tol ? 'slow' : pace < p.pace - p.tol ? 'fast' : null;
           if(seg && !inGrace) seg.ticks[dir || 'ok']++;
-          ts.textContent = fmtPace(pace) + '/km · ' + (dir==='slow' ? 'LENTO' : dir==='fast' ? 'RÁPIDO' : 'bien');
-          if(!inGrace && remaining > 14) evalAlert(dir, ts);
+          const slowTxt = p.kind==='rest' ? 'suave' : 'LENTO';
+          ts.textContent = fmtPace(pace) + '/km · ' + (dir==='slow' ? slowTxt : dir==='fast' ? 'RÁPIDO' : 'bien');
+          const alertDirNow = (p.kind==='rest' && dir==='slow') ? null : dir;
+          if(!inGrace && !quiet && remaining > 14) evalAlert(alertDirNow, ts);
         }
       }
 
@@ -1157,14 +1168,14 @@ select,input[type=number]{
     if(s.warmup>0) parts.push(Math.round(s.warmup/60) + "' calentamiento a " + fmtPace(s.warmupPace!=null?s.warmupPace:EASY_PACE));
     if(s.segments && s.segments.length){
       s.segments.forEach(function(sg){
-        if(sg.dur) parts.push(fmtMMSS(sg.dur) + ' trote');
+        if(sg.dur) parts.push(fmtMMSS(sg.dur) + ' trote a ' + fmtPace(s.restPace!=null?s.restPace:REST_PACE));
         else parts.push(fmtKm(sg.meters) + (sg.pace!=null ? ' a ' + fmtPace(sg.pace) + ' (±' + sg.tol + ')' : ''));
       });
     } else {
       const w = s.work;
       parts.push((s.count>1 ? s.count + '×' : '') + (w.meters>=1000 && s.count===1 ? fmtKm(w.meters) : fmtNum(w.meters) + ' m') +
         (w.pace!=null ? ' a ' + fmtPace(w.pace) + ' (±' + w.tol + ')' : ' progresivos'));
-      if(s.rest && s.rest.dur>0 && s.count>1) parts.push('rec. ' + fmtMMSS(s.rest.dur));
+      if(s.rest && s.rest.dur>0 && s.count>1) parts.push('rec. ' + fmtMMSS(s.rest.dur) + ' a ' + fmtPace(s.restPace!=null?s.restPace:REST_PACE));
     }
     if(s.cooldown>0) parts.push(Math.round(s.cooldown/60) + "' enfriamiento a " + fmtPace(s.cooldownPace!=null?s.cooldownPace:EASY_PACE));
     return parts.join(' · ');
