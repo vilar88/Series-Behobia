@@ -140,8 +140,12 @@ select,input[type=number]{
 .run-bottom button.danger{background:rgba(0,0,0,.28);}
 
 /* ---------------- Done / error screens ---------------- */
-#done,#gpsError{max-width:480px;margin:0 auto;padding:3rem 1.25rem;text-align:center;}
-#done .big,#gpsError .big{font-family:var(--font-display);font-size:1.7rem;font-weight:800;margin-top:0.6rem;}
+#done,#gpsError,#gate{max-width:480px;margin:0 auto;padding:3rem 1.25rem;text-align:center;}
+#done .big,#gpsError .big,#gate .big{font-family:var(--font-display);font-size:1.7rem;font-weight:800;margin-top:0.6rem;}
+#gate p{color:var(--ink-muted);margin-top:0.8rem;line-height:1.6;}
+#gate .gate-acc{font-family:var(--font-mono);font-size:3rem;font-weight:600;margin-top:1.2rem;}
+#gate .gate-acc.ok{color:#1F7A5C;}
+#gate .big-btn,#gate .sec-btn{max-width:320px;margin:1rem auto 0;display:block;}
 #done .stats{font-family:var(--font-mono);color:var(--ink-muted);margin-top:0.6rem;}
 #gpsError p{color:var(--ink-muted);margin-top:0.8rem;line-height:1.6;}
 
@@ -273,7 +277,7 @@ select,input[type=number]{
     <button class="big-btn" id="startCustomBtn">Empezar</button>
   </div>
 
-  <p class="note">Necesita permiso de localización y GPS real activado en el móvil, con la pantalla encendida y esta pestaña en primer plano durante toda la sesión. El calentamiento le da tiempo a enganchar señal antes de la primera serie. Para las tiradas largas de más de una hora, plantéate llevar batería externa.</p>
+  <p class="note">Necesita permiso de localización y GPS real activado en el móvil, con la pantalla encendida y esta pestaña en primer plano durante toda la sesión. Al pulsar Empezar espera parado a cielo abierto: la sesión arranca sola cuando el GPS baja de ±20 m. Si la señal se pierde en carrera, deja de avisar de ritmo y estima la distancia por tiempo hasta que vuelve. Para las tiradas largas de más de una hora, plantéate llevar batería externa.</p>
   <div class="last-msg" id="lastMsg"></div>
 </div>
 
@@ -336,6 +340,16 @@ select,input[type=number]{
     <button class="sec-btn" id="shareBtn" hidden>Compartir…</button>
     <button class="sec-btn" id="doneBackBtn">Volver</button>
   </div>
+</div>
+
+<!-- ============ GATE: esperar GPS antes de arrancar ============ -->
+<div id="gate" hidden>
+  <div class="eyebrow">Antes de empezar</div>
+  <div class="big">Esperando GPS</div>
+  <div class="gate-acc tabular" id="gateAcc">—</div>
+  <p id="gateText">Quédate parado a cielo abierto. La sesión empieza sola cuando la precisión baje de ±20 m.</p>
+  <button class="big-btn" id="gateForceBtn" hidden>Empezar sin esperar</button>
+  <button class="sec-btn" id="gateCancelBtn">Cancelar</button>
 </div>
 
 <!-- ============ GPS ERROR ============ -->
@@ -686,6 +700,15 @@ select,input[type=number]{
   const gpsBanner = document.getElementById('gpsBanner');
   const gpsBannerText = document.getElementById('gpsBannerText');
   let gpsWatchId = null, lastFix = null, gpsAccuracy = null, gpsOk = false, lastFixTs = 0;
+  // Calidad del GPS
+  //  · START_ACC: precisión necesaria para arrancar la sesión
+  //  · MAX_ACC: los puntos peores se descartan (no suman distancia ni ritmo)
+  //  · LOST_MS: sin un punto bueno durante este tiempo → modo "ritmo estimado":
+  //    se calla los avisos de ritmo y suma distancia por tiempo al ritmo objetivo del tramo
+  //  · MAX_SPEED: saltos más rápidos de 2:23/km se descartan
+  const START_ACC = 20, MAX_ACC = 25, LOST_MS = 10000, MAX_SPEED = 7;
+  let estDistanceAll = 0, estInKm = 0;
+  let lastGoodFixTs = 0, gpsLost = false, lastTickTs = 0, lastLostAnnounce = 0;
   let totalDistanceAll = 0;
   let phaseDistAll = 0; // distancia del tramo actual, sea del tipo que sea
   let workDistanceAccum = 0;
@@ -709,37 +732,79 @@ select,input[type=number]{
     gpsAccuracy = accuracy;
     document.getElementById('runGpsAcc').textContent = 'GPS ±' + Math.round(accuracy) + 'm';
 
-    if(accuracy > 30){
+    lastFixTs = t;
+    if(gateActive) gateOnFix(accuracy);
+
+    // Punto malo: se descarta entero. No cuenta como señal viva.
+    if(accuracy > MAX_ACC){
       setGpsBanner(false, 'Señal débil (±' + Math.round(accuracy) + ' m) — sal a cielo abierto si puedes.');
-      lastFixTs = t;
       return;
     }
-    gpsOk = true; lastFixTs = t;
+    gpsOk = true; lastGoodFixTs = Date.now();
     setGpsBanner(true, 'GPS listo (±' + Math.round(accuracy) + ' m).');
 
-    if(!running){ lastFix = {lat,lon,t}; return; }
+    if(!running){ gpsLost = false; lastFix = {lat,lon,t}; return; } // en espera o en pausa
+
+    // Vuelve la señal tras un corte: la distancia del hueco ya se ha estimado por tiempo,
+    // así que se arranca de cero desde este punto (nunca se suma el salto).
+    if(gpsLost){ gpsRecovered(); lastFix = {lat,lon,t}; return; }
 
     if(lastFix){
       const d = haversine(lastFix.lat, lastFix.lon, lat, lon);
       const dt = (t - lastFix.t)/1000;
-      if(dt>0.2){
+      if(dt > LOST_MS/1000){
+        // Hueco largo que no llegó a marcarse como corte: se estima en vez de sumar el salto
+        addDistance(estimateMeters(dt), t, true);
+      } else if(dt>0.2){
         const speed = d/dt; // m/s
-        if(d<2 || speed<=7){ // descarta saltos imposibles (>7 m/s ≈ 2:23/km)
-          totalDistanceAll += d;
-          phaseDistAll += d;
-          checkSplit();
-          const cp = currentIdx>=0 ? phases[currentIdx] : null;
-          if(cp && cp.kind==='work' && workPhaseActive){
-            workDistanceAccum += d;
-            paceBuffer.push({t:t, d:workDistanceAccum});
-          } else if(cp && cp.kind!=='work'){
-            paceBuffer.push({t:t, d:phaseDistAll});
-          }
-          while(paceBuffer.length>1 && (t - paceBuffer[0].t) > sens.win) paceBuffer.shift();
-        }
+        if(d<2 || speed<=MAX_SPEED) addDistance(d, t, false);
+        else { lastFix = {lat,lon,t}; return; }
+      } else {
+        return; // demasiado seguido: se ignora y se conserva la referencia
       }
     }
     lastFix = {lat,lon,t};
+  }
+
+  // Suma distancia al total, al tramo y a la serie. Lo estimado no entra en el cálculo de ritmo.
+  function addDistance(d, t, estimated){
+    if(!(d>0)) return;
+    totalDistanceAll += d;
+    phaseDistAll += d;
+    if(estimated){ if(seg) seg.estDist = (seg.estDist||0) + d; estDistanceAll += d; estInKm += d; }
+    checkSplit();
+    const cp = currentIdx>=0 ? phases[currentIdx] : null;
+    if(cp && cp.kind==='work' && workPhaseActive){
+      workDistanceAccum += d;
+      if(!estimated) paceBuffer.push({t:t, d:workDistanceAccum});
+    } else if(cp && cp.kind!=='work'){
+      if(!estimated) paceBuffer.push({t:t, d:phaseDistAll});
+    }
+    while(paceBuffer.length>1 && (t - paceBuffer[0].t) > sens.win) paceBuffer.shift();
+  }
+
+  // Ritmo con el que se estima la distancia sin GPS: el objetivo del tramo actual
+  function estimatePace(){
+    const p = currentIdx>=0 ? phases[currentIdx] : null;
+    if(!p) return EASY_PACE;
+    if(p.pace!=null) return p.pace;
+    return p.kind==='rest' ? REST_PACE : EASY_PACE;
+  }
+  function estimateMeters(sec){ return sec / estimatePace() * 1000; }
+
+  function gpsLostStart(){
+    gpsLost = true; paceBuffer = [];
+    alertStreak = 0; alertDir = null; alertedDir = null;
+    if(seg) seg.lostCount = (seg.lostCount||0) + 1;
+    // un solo aviso; si la señal va y viene, no repite antes de 1 minuto
+    if(Date.now() - lastLostAnnounce > 60000){
+      lastLostAnnounce = Date.now();
+      announce('Señal débil. Ritmo estimado.', 500);
+    }
+  }
+  function gpsRecovered(){
+    gpsLost = false; paceBuffer = [];
+    beep(880,0.08); setTimeout(function(){ beep(1100,0.12); }, 100);
   }
   function startGpsWatch(){
     if(!('geolocation' in navigator)){
@@ -825,21 +890,79 @@ select,input[type=number]{
     gpsErrorEl.hidden = true; setupEl.hidden = false;
   });
 
+  // ---------------- Espera de GPS antes de arrancar ----------------
+  const gateEl = document.getElementById('gate');
+  let gateActive = false, gateStartTs = 0, gateGoodCount = 0, gateTimer = null, pendingSession = null;
+  const GATE_FORCE_AFTER = 60; // s hasta que aparece "Empezar sin esperar"
+
   function loadSession(name, s){
+    pendingSession = {name:name, s:s};
+    lastFix = null; gpsOk = false; gpsAccuracy = null; lastGoodFixTs = 0; gpsLost = false;
+    if(!startGpsWatch()) return;
+    // desbloquea audio en iOS con el toque del usuario
+    beep(660,0.08); speak('Esperando GPS.');
+    gateActive = true; gateStartTs = Date.now(); gateGoodCount = 0;
+    document.getElementById('gateAcc').textContent = '—';
+    document.getElementById('gateAcc').className = 'gate-acc tabular';
+    document.getElementById('gateText').textContent = 'Quédate parado a cielo abierto. La sesión empieza sola cuando la precisión baje de ±' + START_ACC + ' m.';
+    document.getElementById('gateForceBtn').hidden = true;
+    setupEl.hidden = true; doneEl.hidden = true; gpsErrorEl.hidden = true; runEl.hidden = true; gateEl.hidden = false;
+    requestWakeLock();
+    gateTimer = setInterval(function(){
+      const waited = (Date.now()-gateStartTs)/1000;
+      if(waited >= GATE_FORCE_AFTER) document.getElementById('gateForceBtn').hidden = false;
+      if(gpsAccuracy==null) document.getElementById('gateText').textContent = 'Buscando satélites… (' + Math.round(waited) + ' s)';
+    }, 1000);
+  }
+
+  function gateOnFix(acc){
+    const el = document.getElementById('gateAcc');
+    el.textContent = '±' + Math.round(acc) + ' m';
+    if(acc <= START_ACC){
+      gateGoodCount++;
+      el.className = 'gate-acc tabular ok';
+      if(gateGoodCount >= 2){ gateDone(false); } // dos puntos buenos seguidos
+    } else {
+      gateGoodCount = 0;
+      el.className = 'gate-acc tabular';
+      document.getElementById('gateText').textContent = 'Precisión todavía baja. Quédate parado a cielo abierto; arranca solo al bajar de ±' + START_ACC + ' m.';
+    }
+  }
+
+  function gateDone(forced){
+    if(!gateActive) return;
+    gateActive = false; clearInterval(gateTimer); gateTimer = null;
+    gateEl.hidden = true;
+    if(!forced){ beep(880,0.1); setTimeout(function(){ beep(1100,0.14); }, 110); }
+    const ps = pendingSession; pendingSession = null;
+    startSession(ps.name, ps.s, forced);
+  }
+  document.getElementById('gateForceBtn').addEventListener('click', function(){ gateDone(true); });
+  document.getElementById('gateCancelBtn').addEventListener('click', function(){
+    gateActive = false; clearInterval(gateTimer); gateTimer = null; pendingSession = null;
+    stopGpsWatch(); releaseWakeLock();
+    window.speechSynthesis && window.speechSynthesis.cancel();
+    gateEl.hidden = true; setupEl.hidden = false;
+  });
+
+  function startSession(name, s, forced){
     phases = buildPhases(s);
     sessionName = name;
     sessionStartTs = Date.now(); pausedAccumTotal = 0; pauseStartTs = null;
-    currentIdx = -1; totalDistanceAll = 0; phaseDistAll = 0; lastFix = null; gpsOk = false;
+    currentIdx = -1; totalDistanceAll = 0; phaseDistAll = 0; estDistanceAll = 0; estInKm = 0;
+    // si se fuerza sin GPS, se arranca ya en modo estimado
+    if(forced && Date.now() - lastGoodFixTs > LOST_MS){ gpsLost = true; }
+    lastTickTs = Date.now();
     document.getElementById('runSessionName').textContent = name;
 
-    if(!startGpsWatch()) return;
     startRecording(name, s);
+    if(forced) rec.forcedStart = true;
 
     setupEl.hidden = true; doneEl.hidden = true; gpsErrorEl.hidden = true; runEl.hidden = false;
     running = true;
     requestWakeLock();
     beep(660,0.12);
-    speak('Empezamos. ' + name.replace(/^[^·]*·\s*/, '').replace(/\s*⭐/, '') + '.');
+    speak((forced ? '' : 'GPS listo. ') + 'Empezamos. ' + name.replace(/^[^·]*·\s*/, '').replace(/\s*⭐/, '') + '.');
     goToPhase(0);
     tickHandle = setInterval(tick, 400);
   }
@@ -898,8 +1021,21 @@ select,input[type=number]{
 
   function tick(){
     if(!running) return;
+    const nowTs = Date.now();
+    const tickDt = Math.min(2, Math.max(0, (nowTs - lastTickTs)/1000));
+    lastTickTs = nowTs;
     document.getElementById('runElapsed').textContent = fmtMMSS(overallElapsed());
-    if(gpsAccuracy!=null) document.getElementById('runGpsAcc').textContent = 'GPS ±' + Math.round(gpsAccuracy) + 'm';
+
+    // Corte de GPS: sin punto bueno en LOST_MS → modo estimado.
+    // Se estiman también los segundos ya transcurridos desde el último punto bueno.
+    if(!gpsLost && nowTs - lastGoodFixTs > LOST_MS){
+      gpsLostStart();
+      addDistance(estimateMeters(Math.min(LOST_MS, nowTs - lastGoodFixTs)/1000), nowTs, true);
+    } else if(gpsLost){
+      addDistance(estimateMeters(tickDt), nowTs, true);
+    }
+    document.getElementById('runGpsAcc').textContent = gpsLost ? 'GPS — estimado' :
+      (gpsAccuracy!=null ? 'GPS ±' + Math.round(gpsAccuracy) + 'm' : 'GPS —');
 
     const p = phases[currentIdx];
     if(!p) return;
@@ -911,8 +1047,9 @@ select,input[type=number]{
 
     if(p.kind==='work'){
       if(!workPhaseActive){
-        const recentGoodFix = lastFixTs && (Date.now()-lastFixTs) < 6000 && gpsOk;
-        if(recentGoodFix){
+        const recentGoodFix = lastGoodFixTs && (Date.now()-lastGoodFixTs) < 6000 && gpsOk;
+        // con la señal perdida no se queda esperando: arranca la serie en modo estimado
+        if(recentGoodFix || gpsLost){
           workPhaseActive = true;
           document.getElementById('gpsWaitMsg').hidden = true;
           document.getElementById('distStats').hidden = false;
@@ -932,7 +1069,7 @@ select,input[type=number]{
         document.getElementById('metersLeft').innerHTML = fmtKm2(workDistanceAccum) + '<span class="unit">km</span>';
         document.getElementById('metersCovered').textContent = fmtMMSS(el) + (workDistanceAccum>50 ? ' · media ' + fmtPace(el/workDistanceAccum*1000) + '/km' : '');
         const cp = currentPaceSecPerKm(), st = document.getElementById('paceStatus');
-        st.className='pace-status'; st.textContent = cp ? ('ahora ' + fmtPace(cp) + '/km') : 'calculando…';
+        st.className='pace-status'; st.textContent = cp ? ('ahora ' + fmtPace(cp) + '/km') : (gpsLost ? 'sin GPS · estimado' : 'calculando…');
         maybeSaveDraft();
         return;
       }
@@ -945,7 +1082,7 @@ select,input[type=number]{
       if(p.pace!=null){
         const pace = currentPaceSecPerKm();
         if(pace==null){
-          status.className='pace-status'; status.textContent='calculando…';
+          status.className='pace-status'; status.textContent= gpsLost ? 'sin GPS · estimado' : 'calculando…';
         } else {
           status.classList.remove('alert');
           if(seg){ seg.ticks[pace > p.pace + p.tol ? 'slow' : pace < p.pace - p.tol ? 'fast' : 'ok']++; }
@@ -996,7 +1133,7 @@ select,input[type=number]{
         // en la recuperación no molesta con "Vas lento", ni pisa el aviso de "Un minuto"
         const quiet = p.kind==='rest' && remaining < 66 && remaining > 53;
         if(pace==null){
-          ts.className='pace-status'; ts.textContent='calculando…';
+          ts.className='pace-status'; ts.textContent= gpsLost ? 'sin GPS · estimado' : 'calculando…';
         } else {
           ts.classList.remove('alert');
           const dir = pace > p.pace + p.tol ? 'slow' : pace < p.pace - p.tol ? 'fast' : null;
@@ -1112,6 +1249,9 @@ select,input[type=number]{
     } else {
       const pausedFor = Date.now()-pauseStartTs;
       pausedAccumTotal += pausedFor; phasePausedAccum += pausedFor; pauseStartTs=null;
+      // la pausa no cuenta: ni salto GPS ni distancia estimada por el tiempo parado
+      lastFix = null; lastTickTs = Date.now();
+      if(!gpsLost) lastGoodFixTs = Date.now();
       running = true; this.textContent='Pausar';
       requestWakeLock();
     }
@@ -1183,7 +1323,7 @@ select,input[type=number]{
 
   function startRecording(name, s){
     rec = {id:Date.now(), name:name, startedAt:Date.now(), plan:planText(s), segs:[], splits:[],
-           totalDist:0, totalTime:0, status:'en curso'};
+           totalDist:0, totalTime:0, status:'en curso', splitsEst:[]};
     seg = null; nextSplitAt = 1000; lastSplitT = 0; lastDraftSave = 0;
   }
 
@@ -1218,6 +1358,7 @@ select,input[type=number]{
       const t = overallElapsed();
       const sp = t - lastSplitT;
       rec.splits.push(Math.round(sp));
+      rec.splitsEst.push(Math.round(Math.min(estInKm, 1000))); estInKm = 0;
       lastSplitT = t; nextSplitAt += 1000;
       const p = phases[currentIdx];
       if(p && p.free){ speak('Kilómetro ' + rec.splits.length + '. ' + paceWords(sp) + '.'); }
@@ -1231,6 +1372,7 @@ select,input[type=number]{
   function snapshot(status){
     const r = JSON.parse(JSON.stringify(rec));
     r.totalDist = Math.round(totalDistanceAll);
+    r.estDist = Math.round(estDistanceAll);
     r.totalTime = Math.round(overallElapsed());
     const lastD = totalDistanceAll - (nextSplitAt - 1000);
     if(lastD >= 50) r.lastSplit = {dist:Math.round(lastD), time:Math.round(r.totalTime - lastSplitT)};
@@ -1276,6 +1418,9 @@ select,input[type=number]{
     if(!n || sg.pace==null) return null;
     return {ok:Math.round(100*sg.ticks.ok/n), slow:Math.round(100*sg.ticks.slow/n), fast:Math.round(100*sg.ticks.fast/n)};
   }
+  function estNote(sg){
+    return sg.estDist>=20 ? fmtNum(sg.estDist) + ' m estimados sin GPS' : '';
+  }
   function segNote(sg){
     if(sg.kind==='work' && sg.target && sg.dist < sg.target - 15){
       return (sg.end==='skip' ? 'saltada' : sg.end==='manual' ? 'cortada' : 'incompleta') + ' (' + fmtNum(sg.dist) + ' de ' + fmtNum(sg.target) + ' m)';
@@ -1299,6 +1444,8 @@ select,input[type=number]{
     L.push('Fecha: ' + fmtDate(r.startedAt) + ' · ' + statusLabel(r.status));
     L.push('Plan: ' + r.plan);
     L.push('Total: ' + fmtKm2(r.totalDist) + ' km · ' + fmtMMSS(r.totalTime) + ' · ' + avg);
+    if(r.estDist>=20) L.push('GPS: ' + fmtNum(r.estDist) + ' m estimados por tiempo al ritmo objetivo (señal perdida)' + (r.forcedStart ? ' · arranque sin esperar GPS' : ''));
+    else if(r.forcedStart) L.push('GPS: arranque sin esperar señal');
     L.push('');
     L.push('TRAMOS');
     r.segs.forEach(function(sg){
@@ -1308,14 +1455,17 @@ select,input[type=number]{
       if(sg.pace!=null) line += ' (obj. ' + fmtPace(sg.pace) + ' ±' + sg.tol + ')';
       if(rp) line += ' · en rango ' + rp.ok + '%, lento ' + rp.slow + '%, rápido ' + rp.fast + '%';
       if(note) line += ' · ' + note;
+      if(estNote(sg)) line += ' · ' + estNote(sg);
       L.push(line);
     });
     if(r.splits.length || r.lastSplit){
       L.push('');
       L.push('PARCIALES POR KM');
-      const sp = r.splits.map(function(s,i){ return (i+1) + ': ' + fmtMMSS(s); });
+      const est = r.splitsEst || [];
+      const sp = r.splits.map(function(s,i){ return (i+1) + ': ' + fmtMMSS(s) + (est[i]>=20 ? '*' : ''); });
       if(r.lastSplit) sp.push(fmtKm2(r.lastSplit.dist) + ' km finales: ' + fmtPace(r.lastSplit.time/r.lastSplit.dist*1000) + '/km');
       L.push(sp.join(' · '));
+      if(est.some(function(e){ return e>=20; })) L.push('* km con tramo estimado sin GPS');
     }
     return L.join('\n');
   }
@@ -1338,7 +1488,7 @@ select,input[type=number]{
 
     let h = '<tr><th>Tramo</th><th>Dist.</th><th>Tiempo</th><th>Ritmo</th><th>Obj.</th><th>Rango</th></tr>';
     r.segs.forEach(function(sg){
-      const pc = segPace(sg), rp = rangePct(sg), note = segNote(sg);
+      const pc = segPace(sg), rp = rangePct(sg), note = [segNote(sg), estNote(sg)].filter(Boolean).join(' · ');
       let paceCls = '';
       if(pc && sg.pace!=null) paceCls = Math.abs(pc - sg.pace) <= sg.tol ? 'good' : 'bad';
       h += '<tr class="' + (sg.kind==='work' ? 'work' : 'easy') + '">' +
@@ -1355,7 +1505,8 @@ select,input[type=number]{
     document.getElementById('sumSplitsBlock').hidden = !hasSplits;
     if(hasSplits){
       let sh = '<tr><th>Km</th><th>Ritmo</th></tr>';
-      r.splits.forEach(function(s,i){ sh += '<tr><td>' + (i+1) + '</td><td>' + fmtMMSS(s) + '</td></tr>'; });
+      const est = r.splitsEst || [];
+      r.splits.forEach(function(s,i){ sh += '<tr><td>' + (i+1) + '</td><td>' + fmtMMSS(s) + (est[i]>=20 ? ' <span class="bad" style="font-size:0.72rem;">estimado</span>' : '') + '</td></tr>'; });
       if(r.lastSplit) sh += '<tr><td>' + fmtKm2(r.lastSplit.dist) + '</td><td>' + fmtPace(r.lastSplit.time/r.lastSplit.dist*1000) + '</td></tr>';
       document.getElementById('sumSplits').innerHTML = sh;
     }
