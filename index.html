@@ -117,6 +117,15 @@ select,input[type=number]{
 #run.phase-rest{background:#A83E1A;}
 .run-top{display:flex;justify-content:space-between;align-items:center;padding:0.9rem 1.1rem 0.4rem;font-family:var(--font-mono);font-size:0.72rem;opacity:0.9;gap:0.5rem;}
 .run-top span{white-space:nowrap;}
+#runSessionName{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;text-align:center;}
+.run-top .gps-pill{flex:0 0 auto;}
+.gps-pill{display:inline-flex;align-items:center;gap:0.4rem;padding:0.32rem 0.7rem;border-radius:999px;font-weight:600;font-size:0.82rem;background:rgba(0,0,0,0.28);}
+.gps-pill::before{content:"";width:0.6rem;height:0.6rem;border-radius:50%;background:#9AA5A0;}
+.gps-pill.ok::before{background:#4BE08F;box-shadow:0 0 0 3px rgba(75,224,143,0.25);}
+.gps-pill.weak::before{background:#F2C14E;}
+.gps-pill.lost{background:#F2C14E;color:#1E1E1E;}
+.gps-pill.lost::before{background:#1E1E1E;}
+#gate .gate-ok{font-family:var(--font-display);font-weight:800;font-size:1.3rem;color:#1F7A5C;margin-top:0.4rem;}
 .run-center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:1rem;}
 .phase-label{font-family:var(--font-mono);font-size:1rem;letter-spacing:0.12em;text-transform:uppercase;opacity:0.9;}
 .rep-count{font-family:var(--font-mono);font-size:0.9rem;opacity:0.75;margin-top:0.2rem;}
@@ -286,7 +295,7 @@ select,input[type=number]{
   <div class="run-top">
     <span id="runElapsed">0:00</span>
     <span id="runSessionName"></span>
-    <span id="runGpsAcc">GPS —</span>
+    <span id="runGpsAcc" class="gps-pill">GPS —</span>
   </div>
   <div class="run-center">
     <div class="phase-label" id="phaseLabel">Calentamiento</div>
@@ -347,6 +356,7 @@ select,input[type=number]{
   <div class="eyebrow">Antes de empezar</div>
   <div class="big">Esperando GPS</div>
   <div class="gate-acc tabular" id="gateAcc">—</div>
+  <div class="gate-ok" id="gateOk" hidden>✓ GPS listo</div>
   <p id="gateText">Quédate parado a cielo abierto. La sesión empieza sola cuando la precisión baje de ±20 m.</p>
   <button class="big-btn" id="gateForceBtn" hidden>Empezar sin esperar</button>
   <button class="sec-btn" id="gateCancelBtn">Cancelar</button>
@@ -730,7 +740,6 @@ select,input[type=number]{
     const {latitude:lat, longitude:lon, accuracy} = pos.coords;
     const t = pos.timestamp || Date.now();
     gpsAccuracy = accuracy;
-    document.getElementById('runGpsAcc').textContent = 'GPS ±' + Math.round(accuracy) + 'm';
 
     lastFixTs = t;
     if(gateActive) gateOnFix(accuracy);
@@ -791,6 +800,17 @@ select,input[type=number]{
     return p.kind==='rest' ? REST_PACE : EASY_PACE;
   }
   function estimateMeters(sec){ return sec / estimatePace() * 1000; }
+
+  // Indicador de GPS siempre visible arriba a la derecha en carrera
+  //  verde = señal buena · amarillo punto = señal débil (aún no cortada) · amarillo entero = sin GPS, estimando
+  function updateGpsPill(){
+    const el = document.getElementById('runGpsAcc');
+    if(gpsLost){ el.className = 'gps-pill lost'; el.textContent = 'SIN GPS · estimado'; return; }
+    if(gpsAccuracy==null){ el.className = 'gps-pill'; el.textContent = 'GPS —'; return; }
+    const good = gpsAccuracy <= MAX_ACC;
+    el.className = 'gps-pill ' + (good ? 'ok' : 'weak');
+    el.textContent = (good ? 'GPS OK' : 'GPS débil') + ' ±' + Math.round(gpsAccuracy) + ' m';
+  }
 
   function gpsLostStart(){
     gpsLost = true; paceBuffer = [];
@@ -892,7 +912,7 @@ select,input[type=number]{
 
   // ---------------- Espera de GPS antes de arrancar ----------------
   const gateEl = document.getElementById('gate');
-  let gateActive = false, gateStartTs = 0, gateGoodCount = 0, gateTimer = null, pendingSession = null;
+  let gateActive = false, gateStartTs = 0, gateGoodCount = 0, gateTimer = null, gateConfirmTimer = null, pendingSession = null;
   const GATE_FORCE_AFTER = 60; // s hasta que aparece "Empezar sin esperar"
 
   function loadSession(name, s){
@@ -906,11 +926,12 @@ select,input[type=number]{
     document.getElementById('gateAcc').className = 'gate-acc tabular';
     document.getElementById('gateText').textContent = 'Quédate parado a cielo abierto. La sesión empieza sola cuando la precisión baje de ±' + START_ACC + ' m.';
     document.getElementById('gateForceBtn').hidden = true;
+    document.getElementById('gateOk').hidden = true; gateConfirmTimer = null;
     setupEl.hidden = true; doneEl.hidden = true; gpsErrorEl.hidden = true; runEl.hidden = true; gateEl.hidden = false;
     requestWakeLock();
     gateTimer = setInterval(function(){
       const waited = (Date.now()-gateStartTs)/1000;
-      if(waited >= GATE_FORCE_AFTER) document.getElementById('gateForceBtn').hidden = false;
+      if(waited >= GATE_FORCE_AFTER && !gateConfirmTimer) document.getElementById('gateForceBtn').hidden = false;
       if(gpsAccuracy==null) document.getElementById('gateText').textContent = 'Buscando satélites… (' + Math.round(waited) + ' s)';
     }, 1000);
   }
@@ -921,8 +942,15 @@ select,input[type=number]{
     if(acc <= START_ACC){
       gateGoodCount++;
       el.className = 'gate-acc tabular ok';
-      if(gateGoodCount >= 2){ gateDone(false); } // dos puntos buenos seguidos
-    } else {
+      if(gateGoodCount === 2){ // dos puntos buenos seguidos: confirma en pantalla y arranca a los 2 s
+        document.getElementById('gateOk').hidden = false;
+        document.getElementById('gateText').textContent = 'Arrancando…';
+        document.getElementById('gateForceBtn').hidden = true;
+        beep(880,0.1); setTimeout(function(){ beep(1100,0.14); }, 110);
+        speak('GPS listo.');
+        gateConfirmTimer = setTimeout(function(){ gateDone(false); }, 2000);
+      }
+    } else if(!gateConfirmTimer){
       gateGoodCount = 0;
       el.className = 'gate-acc tabular';
       document.getElementById('gateText').textContent = 'Precisión todavía baja. Quédate parado a cielo abierto; arranca solo al bajar de ±' + START_ACC + ' m.';
@@ -932,14 +960,15 @@ select,input[type=number]{
   function gateDone(forced){
     if(!gateActive) return;
     gateActive = false; clearInterval(gateTimer); gateTimer = null;
+    clearTimeout(gateConfirmTimer); gateConfirmTimer = null;
     gateEl.hidden = true;
-    if(!forced){ beep(880,0.1); setTimeout(function(){ beep(1100,0.14); }, 110); }
     const ps = pendingSession; pendingSession = null;
     startSession(ps.name, ps.s, forced);
   }
   document.getElementById('gateForceBtn').addEventListener('click', function(){ gateDone(true); });
   document.getElementById('gateCancelBtn').addEventListener('click', function(){
     gateActive = false; clearInterval(gateTimer); gateTimer = null; pendingSession = null;
+    clearTimeout(gateConfirmTimer); gateConfirmTimer = null;
     stopGpsWatch(); releaseWakeLock();
     window.speechSynthesis && window.speechSynthesis.cancel();
     gateEl.hidden = true; setupEl.hidden = false;
@@ -962,7 +991,7 @@ select,input[type=number]{
     running = true;
     requestWakeLock();
     beep(660,0.12);
-    speak((forced ? '' : 'GPS listo. ') + 'Empezamos. ' + name.replace(/^[^·]*·\s*/, '').replace(/\s*⭐/, '') + '.');
+    speak('Empezamos. ' + name.replace(/^[^·]*·\s*/, '').replace(/\s*⭐/, '') + '.');
     goToPhase(0);
     tickHandle = setInterval(tick, 400);
   }
@@ -1034,8 +1063,7 @@ select,input[type=number]{
     } else if(gpsLost){
       addDistance(estimateMeters(tickDt), nowTs, true);
     }
-    document.getElementById('runGpsAcc').textContent = gpsLost ? 'GPS — estimado' :
-      (gpsAccuracy!=null ? 'GPS ±' + Math.round(gpsAccuracy) + 'm' : 'GPS —');
+    updateGpsPill();
 
     const p = phases[currentIdx];
     if(!p) return;
