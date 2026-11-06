@@ -465,6 +465,24 @@ select,input[type=number]{
     vie06nov: {name:'Vie 6 nov · Activación + 4 progresiones', warmup:900, cooldown:300, count:4,
       work:{meters:100, label:'Progresión', pace:null, tol:null}, rest:{dur:90, label:'Trote suave'}},
 
+    // ── DOM 8 NOV — BEHOBIA 20 km · objetivo 1:37:00 ──
+    //  Ritmos repartidos según el perfil (mismo esfuerzo, no mismo ritmo).
+    //  Suma de tramos = 1:37:01. Último tramo libre: sigue grabando hasta que cruces la meta
+    //  (el GPS mide de más en carrera) y la paras tú con "Terminar".
+    dom08nov: {name:'Dom 8 nov · BEHOBIA 20 km · 1:37 🏁', noMilestones:true,
+      segments:[
+        {meters:3000, label:'Salida y tapón',           pace:301, tol:15},  // km 1-3   · 5:05 / 5:00 / 4:58
+        {meters:2000, label:'Bajada hacia Gaintxurizketa', pace:284, tol:10},  // km 4-5   · 4:45 / 4:42
+        {meters:3000, label:'Gaintxurizketa',           pace:300, tol:15},  // km 6-8   · 4:58 / 5:08 / 4:55
+        {meters:4000, label:'Bajada y llano de Errenteria', pace:281, tol:10},  // km 9-12  · 4:35 / 4:40 / 4:42 / 4:46
+        {meters:2000, label:'Capuchinos',               pace:297, tol:15},  // km 13-14 · 5:02 / 4:52
+        {meters:2000, label:'Puerto y aproximación',    pace:289, tol:10},  // km 15-16 · 4:48 / 4:50
+        {meters:1000, label:'Miracruz',                 pace:305, tol:15},  // km 17
+        {meters:1000, label:'Bajada por Ategorrieta',   pace:275, tol:10},  // km 18
+        {meters:2000, label:'Final hasta meta',         pace:287, tol:10},  // km 19-20 · 4:48 / 4:46
+        {free:true,   label:'Hasta la meta', goText:'Último empujón. Hasta la meta.'}
+      ]},
+
     // ── SIN PLAN — graba la carrera entera y la terminas tú con "Terminar" ──
     libre: {name:'Carrera libre (sin objetivo, la terminas tú)', free:true,
       segments:[{meters:1e9, label:'Carrera libre', pace:null, tol:null}]},
@@ -493,8 +511,10 @@ select,input[type=number]{
           phases.push({kind:'rest', dur:seg.dur, label:seg.label||'Trote suave',
                        pace:(s.restPace!=null?s.restPace:REST_PACE), tol:REST_TOL});
         } else {
-          phases.push({kind:'work', targetMeters:seg.meters, label:seg.label||'Tramo',
-                       pace:(seg.pace!=null?seg.pace:null), tol:(seg.tol!=null?seg.tol:15), free:!!s.free});
+          const segFree = !!(s.free || seg.free);
+          phases.push({kind:'work', targetMeters:(segFree && !seg.meters ? 1e9 : seg.meters), label:seg.label||'Tramo',
+                       pace:(seg.pace!=null?seg.pace:null), tol:(seg.tol!=null?seg.tol:15), free:segFree,
+                       goText:seg.goText||null, noMilestones:!!s.noMilestones});
         }
       });
     } else {
@@ -520,7 +540,8 @@ select,input[type=number]{
     if(s.segments && s.segments.length){
       const parts = s.segments.map(function(seg){
         if(seg.dur) return '<b>'+fmtMMSS(seg.dur)+'</b> de trote suave a <b>'+fmtPace(s.restPace!=null?s.restPace:REST_PACE)+' min/km</b>';
-        return '<b>'+fmtKm(seg.meters)+'</b>'+(seg.pace!=null ? ' a <b>'+fmtPace(seg.pace)+' min/km</b>' : '');
+        if(seg.free) return '<b>sin ritmo hasta cruzar la meta</b> (la paras tú con "Terminar")';
+        return '<b>'+fmtKm(seg.meters)+'</b>'+(seg.label ? ' ('+seg.label+')' : '')+(seg.pace!=null ? ' a <b>'+fmtPace(seg.pace)+' min/km</b>' : '');
       });
       if(parts.length===1){
         const seg = s.segments[0];
@@ -562,6 +583,7 @@ select,input[type=number]{
     if(s.segments && s.segments.length){
       s.segments.forEach(function(seg){
         if(seg.dur) t += seg.dur;
+        else if(seg.free) return;
         else t += (seg.meters/1000) * (seg.pace!=null ? seg.pace : 360);
       });
       return t;
@@ -576,7 +598,7 @@ select,input[type=number]{
 
   function totalDistance(s){
     if(s.segments && s.segments.length){
-      return s.segments.reduce(function(a,seg){ return a + (seg.meters||0); }, 0);
+      return s.segments.reduce(function(a,seg){ return a + (seg.free ? 0 : (seg.meters||0)); }, 0);
     }
     return s.count * s.work.meters;
   }
@@ -1087,7 +1109,8 @@ select,input[type=number]{
           document.getElementById('paceStatus').hidden = (p.pace==null && !p.free);
           document.querySelector('.dist-track').hidden = !!p.free;
           if(seg) seg.activeAt = phaseElapsed();
-          const goText = p.free ? '¡Vamos! Carrera libre.' : p.total>1 ? ('¡Vamos! ' + p.targetMeters + ' metros.') : ('¡Vamos! ' + fmtKm(p.targetMeters) + '.');
+          const goText = p.goText ? p.goText : p.free ? '¡Vamos! Carrera libre.' : p.total>1 ? ('¡Vamos! ' + p.targetMeters + ' metros.') :
+                         ('¡Vamos! ' + fmtKm(p.targetMeters) + (p.pace!=null ? ' a ' + paceWords(p.pace) : '') + '.');
           beep(880,0.16); speak(goText);
         }
         return;
@@ -1131,7 +1154,7 @@ select,input[type=number]{
       maybeSaveDraft();
 
       // Hitos del tramo a ritmo: mitad y último 10 %
-      if(p.pace!=null && workDistanceAccum < p.targetMeters){
+      if(p.pace!=null && !p.noMilestones && workDistanceAccum < p.targetMeters){
         if(!phaseAnnounced.half && workDistanceAccum >= p.targetMeters*0.5){
           phaseAnnounced.half = true;
           announce('Mitad. Quedan ' + metersWords(p.targetMeters*0.5) + '.', 700);
@@ -1337,6 +1360,7 @@ select,input[type=number]{
     if(s.segments && s.segments.length){
       s.segments.forEach(function(sg){
         if(sg.dur) parts.push(fmtMMSS(sg.dur) + ' trote a ' + fmtPace(s.restPace!=null?s.restPace:REST_PACE));
+        else if(sg.free) parts.push('libre hasta meta');
         else parts.push(fmtKm(sg.meters) + (sg.pace!=null ? ' a ' + fmtPace(sg.pace) + ' (±' + sg.tol + ')' : ''));
       });
     } else {
