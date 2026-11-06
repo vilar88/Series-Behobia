@@ -466,8 +466,8 @@ select,input[type=number]{
       work:{meters:100, label:'Progresión', pace:null, tol:null}, rest:{dur:90, label:'Trote suave'}},
 
     // ── DOM 8 NOV — BEHOBIA 20 km · objetivo 1:37:00 ──
-    //  Sin avisos de ritmo. Al cerrar cada km por GPS dice cuántos segundos vas por encima
-    //  (más lento) o por debajo (más rápido) del plan acumulado, y avisa de los geles.
+    //  Sin avisos de ritmo. Al cerrar cada km por GPS dice cuántos segundos vas más lento
+    //  o más rápido que el plan acumulado, y avisa de los geles.
     //  Plan km a km según el perfil (tapón, Gaintxurizketa, Capuchinos, Miracruz).
     //  gpsFactor: el GPS mide ~1 % de más en carrera; el km N del GPS se compara con el plan
     //  en N/1,01 km reales, para que el desfase no salga falsamente a favor.
@@ -529,7 +529,7 @@ select,input[type=number]{
   }
 
   function describeFlow(s){
-    if(s.kmPlan) return 'Plan de carrera para <b>'+fmtHMS(s.kmPlan[s.kmPlan.length-1])+'</b>. <b>Sin avisos de ritmo.</b> Al final de cada kilómetro te dice cuántos segundos vas <b>por encima</b> (más lento) o <b>por debajo</b> (más rápido) del plan acumulado.<br><br>'+
+    if(s.kmPlan) return 'Plan de carrera para <b>'+fmtHMS(s.kmPlan[s.kmPlan.length-1])+'</b>. <b>Sin avisos de ritmo.</b> Al final de cada kilómetro te dice cuántos segundos vas <b>más lento</b> o <b>más rápido</b> que el plan acumulado.<br><br>'+
       'Te avisa del gel al cerrar el <b>km '+s.gelKm.join('</b> y el <b>km ')+'</b>.<br><br>'+
       'No arranca sola: cuando tengas GPS, pulsa <b>¡SALIDA!</b> justo al pisar la alfombra. Al cruzar la meta, <b>Terminar</b>.<br><br>'+
       'Pasos previstos: km 5 en <b>'+fmtHMS(s.kmPlan[4])+'</b> · km 10 en <b>'+fmtHMS(s.kmPlan[9])+'</b> · km 15 en <b>'+fmtHMS(s.kmPlan[14])+'</b> · meta en <b>'+fmtHMS(s.kmPlan[s.kmPlan.length-1])+'</b>.';
@@ -1441,7 +1441,7 @@ select,input[type=number]{
     const a = Math.abs(dev);
     let txt = 'Kilómetro ' + km + '. ';
     if(a <= 2) txt += 'En el plan.';
-    else txt += a + (a===1?' segundo ':' segundos ') + (dev>0 ? 'por encima.' : 'por debajo.');
+    else txt += a + (a===1?' segundo ':' segundos ') + (dev>0 ? 'más lento.' : 'más rápido.');
     const gel = curSession.gelKm && curSession.gelKm.indexOf(km) >= 0;
     if(gel){
       txt += ' Toca gel.';
