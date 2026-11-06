@@ -474,7 +474,7 @@ select,input[type=number]{
     //  manualStart: no arranca solo al tener GPS; se pulsa "¡SALIDA!" al pisar la alfombra.
     dom08nov: {name:'Dom 8 nov · BEHOBIA 20 km · 1:37 🏁', free:true, manualStart:true, gpsFactor:1.01,
       kmPlan:[305,605,903,1188,1470,1768,2076,2371,2646,2926,3208,3494,3796,4088,4376,4666,4971,5246,5534,5820],
-      gelKm:[5,12],
+      gelKm:[5,9,12], gelText:{5:'Medio gel.', 9:'Resto del gel.', 12:'Gel dos.'},
       segments:[{meters:1e9, label:'Behobia', pace:null, tol:null, goText:'¡Vamos! A por el uno treinta y siete.'}]},
 
     // ── SIN PLAN — graba la carrera entera y la terminas tú con "Terminar" ──
@@ -530,7 +530,7 @@ select,input[type=number]{
 
   function describeFlow(s){
     if(s.kmPlan) return 'Plan de carrera para <b>'+fmtHMS(s.kmPlan[s.kmPlan.length-1])+'</b>. <b>Sin avisos de ritmo.</b> Al final de cada kilómetro te dice cuántos segundos vas <b>más lento</b> o <b>más rápido</b> que el plan acumulado.<br><br>'+
-      'Te avisa del gel al cerrar el <b>km '+s.gelKm.join('</b> y el <b>km ')+'</b>.<br><br>'+
+      'Geles: '+s.gelKm.map(function(k){ return '<b>km '+k+'</b>'+(s.gelText&&s.gelText[k] ? ' ('+s.gelText[k].replace(/\.$/,'').toLowerCase()+')' : ''); }).join(', ')+'.<br><br>'+
       'No arranca sola: cuando tengas GPS, pulsa <b>¡SALIDA!</b> justo al pisar la alfombra. Al cruzar la meta, <b>Terminar</b>.<br><br>'+
       'Pasos previstos: km 5 en <b>'+fmtHMS(s.kmPlan[4])+'</b> · km 10 en <b>'+fmtHMS(s.kmPlan[9])+'</b> · km 15 en <b>'+fmtHMS(s.kmPlan[14])+'</b> · meta en <b>'+fmtHMS(s.kmPlan[s.kmPlan.length-1])+'</b>.';
     if(s.free) return 'Corres a tu aire, sin ritmo objetivo ni avisos de ritmo. Graba distancia, tiempo y parciales, y te canta cada kilómetro. <b>La terminas tú con "Terminar"</b> y te sale el resumen para copiar.';
@@ -1444,7 +1444,7 @@ select,input[type=number]{
     else txt += a + (a===1?' segundo ':' segundos ') + (dev>0 ? 'más lento.' : 'más rápido.');
     const gel = curSession.gelKm && curSession.gelKm.indexOf(km) >= 0;
     if(gel){
-      txt += ' Toca gel.';
+      txt += ' ' + ((curSession.gelText && curSession.gelText[km]) || 'Toca gel.');
       beep(660,0.12); setTimeout(function(){ beep(660,0.12); }, 180); setTimeout(function(){ beep(990,0.2); }, 360);
     } else {
       beep(880,0.1);
