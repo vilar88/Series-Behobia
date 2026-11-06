@@ -466,22 +466,16 @@ select,input[type=number]{
       work:{meters:100, label:'Progresión', pace:null, tol:null}, rest:{dur:90, label:'Trote suave'}},
 
     // ── DOM 8 NOV — BEHOBIA 20 km · objetivo 1:37:00 ──
-    //  Ritmos repartidos según el perfil (mismo esfuerzo, no mismo ritmo).
-    //  Suma de tramos = 1:37:01. Último tramo libre: sigue grabando hasta que cruces la meta
-    //  (el GPS mide de más en carrera) y la paras tú con "Terminar".
-    dom08nov: {name:'Dom 8 nov · BEHOBIA 20 km · 1:37 🏁', noMilestones:true,
-      segments:[
-        {meters:3000, label:'Salida y tapón',           pace:301, tol:15},  // km 1-3   · 5:05 / 5:00 / 4:58
-        {meters:2000, label:'Bajada hacia Gaintxurizketa', pace:284, tol:10},  // km 4-5   · 4:45 / 4:42
-        {meters:3000, label:'Gaintxurizketa',           pace:300, tol:15},  // km 6-8   · 4:58 / 5:08 / 4:55
-        {meters:4000, label:'Bajada y llano de Errenteria', pace:281, tol:10},  // km 9-12  · 4:35 / 4:40 / 4:42 / 4:46
-        {meters:2000, label:'Capuchinos',               pace:297, tol:15},  // km 13-14 · 5:02 / 4:52
-        {meters:2000, label:'Puerto y aproximación',    pace:289, tol:10},  // km 15-16 · 4:48 / 4:50
-        {meters:1000, label:'Miracruz',                 pace:305, tol:15},  // km 17
-        {meters:1000, label:'Bajada por Ategorrieta',   pace:275, tol:10},  // km 18
-        {meters:2000, label:'Final hasta meta',         pace:287, tol:10},  // km 19-20 · 4:48 / 4:46
-        {free:true,   label:'Hasta la meta', goText:'Último empujón. Hasta la meta.'}
-      ]},
+    //  Sin avisos de ritmo. Al cerrar cada km por GPS dice cuántos segundos vas por encima
+    //  (más lento) o por debajo (más rápido) del plan acumulado, y avisa de los geles.
+    //  Plan km a km según el perfil (tapón, Gaintxurizketa, Capuchinos, Miracruz).
+    //  gpsFactor: el GPS mide ~1 % de más en carrera; el km N del GPS se compara con el plan
+    //  en N/1,01 km reales, para que el desfase no salga falsamente a favor.
+    //  manualStart: no arranca solo al tener GPS; se pulsa "¡SALIDA!" al pisar la alfombra.
+    dom08nov: {name:'Dom 8 nov · BEHOBIA 20 km · 1:37 🏁', free:true, manualStart:true, gpsFactor:1.01,
+      kmPlan:[305,605,903,1188,1470,1768,2076,2371,2646,2926,3208,3494,3796,4088,4376,4666,4971,5246,5534,5820],
+      gelKm:[5,12],
+      segments:[{meters:1e9, label:'Behobia', pace:null, tol:null, goText:'¡Vamos! A por el uno treinta y siete.'}]},
 
     // ── SIN PLAN — graba la carrera entera y la terminas tú con "Terminar" ──
     libre: {name:'Carrera libre (sin objetivo, la terminas tú)', free:true,
@@ -493,6 +487,8 @@ select,input[type=number]{
     const m = Math.floor(totalSec/60), s = totalSec%60;
     return m + ':' + String(s).padStart(2,'0');
   }
+  function fmtHMS(t){ t=Math.round(t); const h=Math.floor(t/3600), m=Math.floor(t%3600/60), x=t%60;
+    return (h? h+':'+String(m).padStart(2,'0') : m)+':'+String(x).padStart(2,'0'); }
   function fmtPace(secPerKm){ return fmtMMSS(secPerKm); }
   function fmtHuman(totalSec){ return Math.round(totalSec/60) + ' min'; }
   function fmtKm(meters){ return meters>=1000 ? (meters/1000).toFixed(meters%1000===0?0:1).replace('.',',')+' km' : meters+' m'; }
@@ -533,6 +529,10 @@ select,input[type=number]{
   }
 
   function describeFlow(s){
+    if(s.kmPlan) return 'Plan de carrera para <b>'+fmtHMS(s.kmPlan[s.kmPlan.length-1])+'</b>. <b>Sin avisos de ritmo.</b> Al final de cada kilómetro te dice cuántos segundos vas <b>por encima</b> (más lento) o <b>por debajo</b> (más rápido) del plan acumulado.<br><br>'+
+      'Te avisa del gel al cerrar el <b>km '+s.gelKm.join('</b> y el <b>km ')+'</b>.<br><br>'+
+      'No arranca sola: cuando tengas GPS, pulsa <b>¡SALIDA!</b> justo al pisar la alfombra. Al cruzar la meta, <b>Terminar</b>.<br><br>'+
+      'Pasos previstos: km 5 en <b>'+fmtHMS(s.kmPlan[4])+'</b> · km 10 en <b>'+fmtHMS(s.kmPlan[9])+'</b> · km 15 en <b>'+fmtHMS(s.kmPlan[14])+'</b> · meta en <b>'+fmtHMS(s.kmPlan[s.kmPlan.length-1])+'</b>.';
     if(s.free) return 'Corres a tu aire, sin ritmo objetivo ni avisos de ritmo. Graba distancia, tiempo y parciales, y te canta cada kilómetro. <b>La terminas tú con "Terminar"</b> y te sale el resumen para copiar.';
     const sentences = [];
     if(s.warmup>0) sentences.push('Empiezas con un <b>calentamiento de '+fmtHuman(s.warmup)+'</b> a <b>'+fmtPace(s.warmupPace!=null?s.warmupPace:EASY_PACE)+' min/km</b> (±'+EASY_TOL+' s), para entrar en calor y dar tiempo al GPS a coger buena señal. 10 segundos antes de acabar te canta el tramo que viene.');
@@ -613,7 +613,7 @@ select,input[type=number]{
   function renderPresetSummary(){
     const s = PRESETS[presetSelect.value];
     document.getElementById('presetFlow').innerHTML = describeFlow(s);
-    document.getElementById('presetTotal').textContent = s.free ? 'Distancia y duración libres' :
+    document.getElementById('presetTotal').textContent = s.kmPlan ? (s.kmPlan.length + ' km · plan ' + fmtHMS(s.kmPlan[s.kmPlan.length-1])) : s.free ? 'Distancia y duración libres' :
       fmtKm(totalDistance(s)) + ' medidos por GPS · total estimado ≈ ' + fmtHuman(estTotalDuration(s));
   }
   presetSelect.addEventListener('change', renderPresetSummary);
@@ -912,7 +912,7 @@ select,input[type=number]{
   const doneEl = document.getElementById('done');
   const gpsErrorEl = document.getElementById('gpsError');
 
-  let phases = [], sessionName = '';
+  let phases = [], sessionName = '', curSession = null;
   let running = false, currentIdx = -1;
   let sessionStartTs = 0, pausedAccumTotal = 0, pauseStartTs = null;
   let phaseStartTs = 0, phasePausedAccum = 0;
@@ -947,7 +947,10 @@ select,input[type=number]{
     document.getElementById('gateAcc').textContent = '—';
     document.getElementById('gateAcc').className = 'gate-acc tabular';
     document.getElementById('gateText').textContent = 'Quédate parado a cielo abierto. La sesión empieza sola cuando la precisión baje de ±' + START_ACC + ' m.';
-    document.getElementById('gateForceBtn').hidden = true;
+    const manual = !!s.manualStart;
+    document.getElementById('gateForceBtn').textContent = manual ? '¡SALIDA!' : 'Empezar sin esperar';
+    document.getElementById('gateForceBtn').hidden = !manual;
+    if(manual) document.getElementById('gateText').textContent = 'Espera a tener GPS listo y pulsa ¡SALIDA! justo al pisar la alfombra de salida.';
     document.getElementById('gateOk').hidden = true; gateConfirmTimer = null;
     setupEl.hidden = true; doneEl.hidden = true; gpsErrorEl.hidden = true; runEl.hidden = true; gateEl.hidden = false;
     requestWakeLock();
@@ -964,7 +967,12 @@ select,input[type=number]{
     if(acc <= START_ACC){
       gateGoodCount++;
       el.className = 'gate-acc tabular ok';
-      if(gateGoodCount === 2){ // dos puntos buenos seguidos: confirma en pantalla y arranca a los 2 s
+      if(gateGoodCount === 2 && pendingSession && pendingSession.s.manualStart){ // carrera: confirma GPS y espera a "¡SALIDA!"
+        document.getElementById('gateOk').hidden = false;
+        document.getElementById('gateText').textContent = 'GPS listo. Pulsa ¡SALIDA! al pisar la alfombra.';
+        beep(880,0.1); setTimeout(function(){ beep(1100,0.14); }, 110);
+        speak('GPS listo.');
+      } else if(gateGoodCount === 2){ // dos puntos buenos seguidos: confirma en pantalla y arranca a los 2 s
         document.getElementById('gateOk').hidden = false;
         document.getElementById('gateText').textContent = 'Arrancando…';
         document.getElementById('gateForceBtn').hidden = true;
@@ -975,7 +983,9 @@ select,input[type=number]{
     } else if(!gateConfirmTimer){
       gateGoodCount = 0;
       el.className = 'gate-acc tabular';
-      document.getElementById('gateText').textContent = 'Precisión todavía baja. Quédate parado a cielo abierto; arranca solo al bajar de ±' + START_ACC + ' m.';
+      document.getElementById('gateText').textContent = (pendingSession && pendingSession.s.manualStart) ?
+        'Precisión todavía baja (necesita ±' + START_ACC + ' m). Si llegas a la alfombra sin GPS listo, pulsa ¡SALIDA! igualmente.' :
+        'Precisión todavía baja. Quédate parado a cielo abierto; arranca solo al bajar de ±' + START_ACC + ' m.';
     }
   }
 
@@ -998,7 +1008,7 @@ select,input[type=number]{
 
   function startSession(name, s, forced){
     phases = buildPhases(s);
-    sessionName = name;
+    sessionName = name; curSession = s;
     sessionStartTs = Date.now(); pausedAccumTotal = 0; pauseStartTs = null;
     currentIdx = -1; totalDistanceAll = 0; phaseDistAll = 0; estDistanceAll = 0; estInKm = 0;
     // si se fuerza sin GPS, se arranca ya en modo estimado
@@ -1007,13 +1017,13 @@ select,input[type=number]{
     document.getElementById('runSessionName').textContent = name;
 
     startRecording(name, s);
-    if(forced) rec.forcedStart = true;
+    if(forced && !(s.manualStart && Date.now() - lastGoodFixTs <= LOST_MS)) rec.forcedStart = true;
 
     setupEl.hidden = true; doneEl.hidden = true; gpsErrorEl.hidden = true; runEl.hidden = false;
     running = true;
     requestWakeLock();
     beep(660,0.12);
-    speak('Empezamos. ' + name.replace(/^[^·]*·\s*/, '').replace(/\s*⭐/, '') + '.');
+    if(!s.manualStart) speak('Empezamos. ' + name.replace(/^[^·]*·\s*/, '').replace(/\s*⭐/, '') + '.');
     goToPhase(0);
     tickHandle = setInterval(tick, 400);
   }
@@ -1046,7 +1056,7 @@ select,input[type=number]{
       document.getElementById('distStats').hidden = true;
       workPhaseActive = false;
       const introText = p.total>1 ? ('Serie ' + p.rep + ' de ' + p.total + '. Buscando GPS.') : (p.label + '. Buscando GPS.');
-      beep(660,0.14); speak(introText);
+      if(!(curSession && curSession.manualStart)){ beep(660,0.14); speak(introText); }
     } else {
       const text =
         p.kind==='warmup' ? ('Calentamiento, ' + minWords(p.dur) + ' a ' + paceWords(p.pace) + '.') :
@@ -1413,8 +1423,33 @@ select,input[type=number]{
       rec.splitsEst.push(Math.round(Math.min(estInKm, 1000))); estInKm = 0;
       lastSplitT = t; nextSplitAt += 1000;
       const p = phases[currentIdx];
-      if(p && p.free){ speak('Kilómetro ' + rec.splits.length + '. ' + paceWords(sp) + '.'); }
+      if(p && p.free && curSession && curSession.kmPlan){ kmPlanCall(rec.splits.length, t); }
+      else if(p && p.free){ speak('Kilómetro ' + rec.splits.length + '. ' + paceWords(sp) + '.'); }
     }
+  }
+  // Tiempo previsto por el plan para una distancia real (km, con decimales)
+  function planAt(km){
+    const c = curSession.kmPlan, n = c.length;
+    if(km <= 0) return 0;
+    if(km >= n) return c[n-1] + (km-n)*(c[n-1]-c[n-2]);
+    const i = Math.floor(km), f = km - i, prev = i>0 ? c[i-1] : 0;
+    return prev + (c[i]-prev)*f;
+  }
+  function kmPlanCall(km, t){
+    const realKm = km / (curSession.gpsFactor || 1);
+    const dev = Math.round(t - planAt(realKm));
+    const a = Math.abs(dev);
+    let txt = 'Kilómetro ' + km + '. ';
+    if(a <= 2) txt += 'En el plan.';
+    else txt += a + (a===1?' segundo ':' segundos ') + (dev>0 ? 'por encima.' : 'por debajo.');
+    const gel = curSession.gelKm && curSession.gelKm.indexOf(km) >= 0;
+    if(gel){
+      txt += ' Toca gel.';
+      beep(660,0.12); setTimeout(function(){ beep(660,0.12); }, 180); setTimeout(function(){ beep(990,0.2); }, 360);
+    } else {
+      beep(880,0.1);
+    }
+    speak(txt);
   }
   function paceWords(sec){
     sec = Math.round(sec); const m = Math.floor(sec/60), s = sec%60;
