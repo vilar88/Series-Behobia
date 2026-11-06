@@ -700,17 +700,43 @@ select,input[type=number]{
       o.start(); o.stop(actx.currentTime+dur+0.02);
     }catch(e){}
   }
-  function speak(text){
-    try{
-      if(!('speechSynthesis' in window)) return;
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang='es-ES'; u.rate=1.0; u.pitch=1.0;
-      const voices = window.speechSynthesis.getVoices();
-      const esVoice = voices.find(v=>v.lang && v.lang.toLowerCase().indexOf('es')===0);
-      if(esVoice) u.voice = esVoice;
-      window.speechSynthesis.speak(u);
-    }catch(e){}
+  // Cola de voz: cada aviso espera a que termine el anterior (antes se cortaban entre sí).
+  //  · opt.droppable: avisos de ritmo; si ya hay algo sonando o en cola se descartan (llegarían tarde)
+  //  · opt.pre: función que suena antes del texto (pitidos) y devuelve los ms que dura
+  const speechQ = []; let speaking = false, speakSafety = null;
+  function stopSpeech(){
+    speechQ.length = 0; speaking = false; clearTimeout(speakSafety);
+    try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
+  }
+  function speak(text, opt){
+    opt = opt || {};
+    if(!('speechSynthesis' in window)) return;
+    if(opt.droppable && (speaking || speechQ.length)) return;
+    if(speechQ.some(function(q){ return q.text===text; })) return;
+    speechQ.push({text:text, pre:opt.pre||null});
+    if(!speaking) nextSpeech();
+  }
+  function nextSpeech(){
+    const item = speechQ.shift();
+    if(!item){ speaking = false; return; }
+    speaking = true;
+    let delay = 0;
+    if(item.pre){ try{ delay = item.pre() || 0; }catch(e){} }
+    setTimeout(function(){
+      let done = false;
+      const finish = function(){ if(done) return; done = true; clearTimeout(speakSafety); setTimeout(nextSpeech, 300); };
+      try{
+        const u = new SpeechSynthesisUtterance(item.text);
+        u.lang='es-ES'; u.rate=1.0; u.pitch=1.0;
+        const voices = window.speechSynthesis.getVoices();
+        const esVoice = voices.find(v=>v.lang && v.lang.toLowerCase().indexOf('es')===0);
+        if(esVoice) u.voice = esVoice;
+        u.onend = finish; u.onerror = finish;
+        window.speechSynthesis.speak(u);
+      }catch(e){ finish(); return; }
+      // red de seguridad por si iOS no avisa del final (sin cancel: el navegador encola, no corta)
+      speakSafety = setTimeout(finish, 2000 + item.text.length*90);
+    }, delay);
   }
   if('speechSynthesis' in window){
     window.speechSynthesis.getVoices();
@@ -1002,7 +1028,7 @@ select,input[type=number]{
     gateActive = false; clearInterval(gateTimer); gateTimer = null; pendingSession = null;
     clearTimeout(gateConfirmTimer); gateConfirmTimer = null;
     stopGpsWatch(); releaseWakeLock();
-    window.speechSynthesis && window.speechSynthesis.cancel();
+    stopSpeech();
     gateEl.hidden = true; setupEl.hidden = false;
   });
 
@@ -1243,7 +1269,7 @@ select,input[type=number]{
       lastAlertTime = now; alertedDir = dir;
       el.classList.add('alert');
       beep(dir==='slow'?520:1050, 0.15);
-      speak(dir==='slow' ? 'Vas lento.' : 'Vas rápido.');
+      speak(dir==='slow' ? 'Vas lento.' : 'Vas rápido.', {droppable:true});
     }
     if(!dir && alertedDir && alertStreak>=8){ // ~3 s de vuelta en rango
       alertedDir=null;
@@ -1305,7 +1331,7 @@ select,input[type=number]{
   document.getElementById('pauseBtn').addEventListener('click', function(){
     if(running){
       running = false; pauseStartTs = Date.now();
-      window.speechSynthesis && window.speechSynthesis.cancel();
+      stopSpeech();
       this.textContent = 'Reanudar';
     } else {
       const pausedFor = Date.now()-pauseStartTs;
@@ -1333,8 +1359,8 @@ select,input[type=number]{
     clearTimeout(endTimer); endArmed=false;
     running=false; if(tickHandle) clearInterval(tickHandle);
     stopGpsWatch(); releaseWakeLock();
-    window.speechSynthesis && window.speechSynthesis.cancel();
-    const r = finalizeRecording(PRESETS.libre && sessionName===PRESETS.libre.name ? 'completa' : 'manual');
+    stopSpeech();
+    const r = finalizeRecording((curSession && curSession.free) ? 'completa' : 'manual');
     pauseStartTs = null;
     document.getElementById('pauseBtn').textContent='Pausar';
     runEl.hidden = true;
@@ -1445,11 +1471,10 @@ select,input[type=number]{
     const gel = curSession.gelKm && curSession.gelKm.indexOf(km) >= 0;
     if(gel){
       txt += ' ' + ((curSession.gelText && curSession.gelText[km]) || 'Toca gel.');
-      beep(660,0.12); setTimeout(function(){ beep(660,0.12); }, 180); setTimeout(function(){ beep(990,0.2); }, 360);
+      speak(txt, {pre:function(){ beep(660,0.12); setTimeout(function(){ beep(660,0.12); }, 180); setTimeout(function(){ beep(990,0.2); }, 360); return 700; }});
     } else {
-      beep(880,0.1);
+      speak(txt, {pre:function(){ beep(880,0.1); return 300; }});
     }
-    speak(txt);
   }
   function paceWords(sec){
     sec = Math.round(sec); const m = Math.floor(sec/60), s = sec%60;
